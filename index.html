@@ -39,7 +39,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
   <script>
-  // Import the functions you need from the SDKs you need
+    // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 // TODO: Add SDKs for Firebase products that you want to use
@@ -48,18 +48,24 @@ import { getAnalytics } from "firebase/analytics";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyDcEu8YOAe8STAmF12YyocEQfG0saSmlps",
-  authDomain: "labour-portal-87bc9.firebaseapp.com",
-  projectId: "labour-portal-87bc9",
-  storageBucket: "labour-portal-87bc9.firebasestorage.app",
-  messagingSenderId: "1060891339598",
-  appId: "1:1060891339598:web:06ae9cbae5021f424ecc1f",
-  measurementId: "G-KWMCPY4XYC"
+  apiKey: "AIzaSyAdbV51h6y113QRi_qXFCU23UggMeS2Tyk",
+  authDomain: "vfs-labour-portal.firebaseapp.com",
+  projectId: "vfs-labour-portal",
+  storageBucket: "vfs-labour-portal.firebasestorage.app",
+  messagingSenderId: "596164397948",
+  appId: "1:596164397948:web:3203d827d6f2b92674b2f9",
+  measurementId: "G-225TDNZRFC"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
@@ -618,4 +624,3 @@ window.addEventListener('load', ()=>{ renderLabourList(); populateAdvSelect(); }
 </script>
 </body>
 </html>
-
