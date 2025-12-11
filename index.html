@@ -32,6 +32,35 @@
   .controls{display:flex;gap:8px;align-items:center;margin-bottom:8px}
   .search{width:260px}
 </style>
+
+  <!-- Firebase SDKs (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    // <-- PASTE your firebaseConfig object here (replace the placeholder values) -->
+    const firebaseConfig = {
+  apiKey: "AIzaSyDcEu8YOAe8STAmF12YyocEQfG0saSmlps",
+  authDomain: "labour-portal-87bc9.firebaseapp.com",
+  projectId: "labour-portal-87bc9",
+  storageBucket: "labour-portal-87bc9.firebasestorage.app",
+  messagingSenderId: "1060891339598",
+  appId: "1:1060891339598:web:06ae9cbae5021f424ecc1f",
+  measurementId: "G-KWMCPY4XYC"
+};
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Optional: quick console confirmation
+    console.log('Firebase initialized for project:', firebaseConfig.projectId);
+  </script>
+
+
+
 </head>
 <body>
 <div class="wrap">
