@@ -1,225 +1,222 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Labour Shift, Advance & Salary Portal</title>
-<style>
-  :root{--sticky-id:100px;--sticky-name:260px}
-  body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;color:#222}
-  .wrap{max-width:1200px;margin:18px auto;padding:14px}
-  .card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 6px 20px rgba(20,20,40,0.05)}
-  h1{margin:6px 0 12px;font-size:20px}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  input,select,button,textarea{font-size:14px;padding:8px;border-radius:8px;border:1px solid #d6e0ef}
-  button{cursor:pointer}
-  .btn{background:#0b79ff;color:#fff;border:none}
-  .btn-muted{background:#6c757d;color:#fff;border:none}
-  .success{background:#28a745;color:#fff;border:none}
-  .danger{background:#dc3545;color:#fff;border:none}
-  table{border-collapse:collapse;width:100%;font-size:13px}
-  th,td{border:1px solid #e8eef8;padding:6px;text-align:center;white-space:nowrap}
-  th{background:#f3f8ff}
-  .small{font-size:12px;color:#555}
-  .muted{color:#666}
-  .hidden{display:none}
-  .table-wrap{overflow:auto;background:#fff;padding:8px;border-radius:8px}
-  table thead th.sticky-id, table tbody td.sticky-id{ position:sticky; left:0; background:#fff; z-index:4; min-width:var(--sticky-id) }
-  table thead th.sticky-name, table tbody td.sticky-name{ position:sticky; left:var(--sticky-id); background:#fff; z-index:3; min-width:var(--sticky-name); text-align:left; padding-left:10px }
-  .readonly{background:#f6f8fb}
-  .left { text-align:left; padding-left:6px }
-  @media (max-width:1100px){ :root{--sticky-name:160px} }
-  .controls{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-  .search{width:260px}
-</style>
-
-  <!-- Firebase SDKs (compat) -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-
-  <script>
-    // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAdbV51h6y113QRi_qXFCU23UggMeS2Tyk",
-  authDomain: "vfs-labour-portal.firebaseapp.com",
-  projectId: "vfs-labour-portal",
-  storageBucket: "vfs-labour-portal.firebasestorage.app",
-  messagingSenderId: "596164397948",
-  appId: "1:596164397948:web:3203d827d6f2b92674b2f9",
-  measurementId: "G-225TDNZRFC"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-
-    // Optional: quick console confirmation
-    console.log('Firebase initialized for project:', firebaseConfig.projectId);
-  </script>
-
-
-
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Labour Shift, Advance & Salary Portal</title>
+  <style>
+    :root{--sticky-id:100px;--sticky-name:260px}
+    body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;color:#222}
+    .wrap{max-width:1200px;margin:18px auto;padding:14px}
+    .card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 6px 20px rgba(20,20,40,0.05)}
+    h1{margin:6px 0 12px;font-size:20px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    input,select,button,textarea{font-size:14px;padding:8px;border-radius:8px;border:1px solid #d6e0ef}
+    button{cursor:pointer}
+    .btn{background:#0b79ff;color:#fff;border:none}
+    .btn-muted{background:#6c757d;color:#fff;border:none}
+    .success{background:#28a745;color:#fff;border:none}
+    .danger{background:#dc3545;color:#fff;border:none}
+    table{border-collapse:collapse;width:100%;font-size:13px}
+    th,td{border:1px solid #e8eef8;padding:6px;text-align:center;white-space:nowrap}
+    th{background:#f3f8ff}
+    .small{font-size:12px;color:#555}
+    .muted{color:#666}
+    .hidden{display:none}
+    .table-wrap{overflow:auto;background:#fff;padding:8px;border-radius:8px}
+    table thead th.sticky-id, table tbody td.sticky-id{ position:sticky; left:0; background:#fff; z-index:4; min-width:var(--sticky-id) }
+    table thead th.sticky-name, table tbody td.sticky-name{ position:sticky; left:var(--sticky-id); background:#fff; z-index:3; min-width:var(--sticky-name); text-align:left; padding-left:10px }
+    .readonly{background:#f6f8fb}
+    .left { text-align:left; padding-left:6px }
+    @media (max-width:1100px){ :root{--sticky-name:160px} }
+    .controls{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .search{width:260px}
+  </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card" id="homeCard">
-    <h1>Labour Shift, Advance & Salary Portal</h1>
-    <div class="row">
-      <button class="btn" id="ownerBtn">Owner Login</button>
-      <button class="btn-muted" id="labourBtn">Labour Login</button>
-      <div style="flex:1"></div>
-    </div>
-    <p class="small muted">Demo owner password: <strong>vfs15254</strong></p>
-  </div>
-
-  <!-- Owner Login -->
-  <div class="card hidden" id="ownerLoginCard">
-    <h3>Owner Login</h3>
-    <label>Enter password</label><br>
-    <input id="ownerPwd" type="password" placeholder="password" autocomplete="off">
-    <div style="margin-top:10px">
-      <button class="btn" id="ownerLogin">Login</button>
-      <button id="ownerBack">Back</button>
-    </div>
-  </div>
-
-  <!-- Labour Login -->
-  <div class="card hidden" id="labourLoginCard">
-    <h3>Labour Login</h3>
-    <label>User ID</label><br>
-    <input id="labUserId" placeholder="L001" autocomplete="off">
-    <label>Password</label><br>
-    <input id="labPwd" type="password" placeholder="password" autocomplete="off">
-    <div style="margin-top:10px">
-      <button class="btn" id="labourLoginBtn">Login</button>
-      <button id="labourBack">Back</button>
-    </div>
-    <p class="small muted">Demo labours: L001 / 1234 &nbsp; L002 / 1234</p>
-  </div>
-
-  <!-- Owner Dashboard -->
-  <div class="card hidden" id="ownerDashboard">
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <h2>Owner Dashboard</h2>
-      <div><button id="ownerLogout">Logout</button></div>
-    </div>
-
-    <div class="controls">
-      <label>Month</label>
-      <input type="month" id="ownerMonth">
-      <button class="btn" id="loadTable">Load Table</button>
-      <button id="addLabour">Add Labour</button>
-      <button id="exportBackup">Export Backup</button>
-      <div style="flex:1"></div>
-      <label>Search</label>
-      <input id="ownerSearch" class="search" placeholder="ID or name" oninput="ownerFilter()">
-      <button class="success" id="saveAll">Save All</button>
-      <button id="exportShiftCSV">Export Shifts CSV</button>
-      <button id="exportShiftXLS">Export Shifts XLS</button>
-      <button id="exportShiftPDF">Export Shifts PDF</button>
-    </div>
-
-    <div id="ownerTableWrap" class="table-wrap card"></div>
-
-    <div class="card" id="advancesCard" style="margin-top:12px">
-      <h3>Advances</h3>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label>Month</label><input type="month" id="advMonth">
-        <button id="showAdv">Show</button>
+  <div class="wrap">
+    <div class="card" id="homeCard">
+      <h1>Labour Shift, Advance & Salary Portal</h1>
+      <div class="row">
+        <button class="btn" id="ownerBtn">Owner Login</button>
+        <button class="btn-muted" id="labourBtn">Labour Login</button>
+        <div style="flex:1"></div>
       </div>
-      <div style="display:flex;gap:12px;margin-top:12px">
-        <div style="flex:1">
-          <table id="advTable"><thead><tr><th>S.No</th><th>ID</th><th>Name</th><th>Total (₹)</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      <p class="small muted">Demo owner password: <strong>vfs15254</strong></p>
+    </div>
+
+    <!-- Owner Login -->
+    <div class="card hidden" id="ownerLoginCard">
+      <h3>Owner Login</h3>
+      <label>Enter password</label><br>
+      <input id="ownerPwd" type="password" placeholder="password" autocomplete="off">
+      <div style="margin-top:10px">
+        <button class="btn" id="ownerLogin">Login</button>
+        <button id="ownerBack">Back</button>
+      </div>
+    </div>
+
+    <!-- Labour Login -->
+    <div class="card hidden" id="labourLoginCard">
+      <h3>Labour Login</h3>
+      <label>User ID</label><br>
+      <input id="labUserId" placeholder="L001" autocomplete="off">
+      <label>Password</label><br>
+      <input id="labPwd" type="password" placeholder="password" autocomplete="off">
+      <div style="margin-top:10px">
+        <button class="btn" id="labourLoginBtn">Login</button>
+        <button id="labourBack">Back</button>
+      </div>
+      <p class="small muted">Demo labours: L001 / 1234 &nbsp; L002 / 1234</p>
+    </div>
+
+    <!-- Owner Dashboard -->
+    <div class="card hidden" id="ownerDashboard">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h2>Owner Dashboard</h2>
+        <div><button id="ownerLogout">Logout</button></div>
+      </div>
+
+      <div class="controls">
+        <label>Month</label>
+        <input type="month" id="ownerMonth">
+        <button class="btn" id="loadTable">Load Table</button>
+        <button id="addLabour">Add Labour</button>
+        <button id="exportBackup">Export Backup</button>
+        <div style="flex:1"></div>
+        <label>Search</label>
+        <input id="ownerSearch" class="search" placeholder="ID or name" oninput="ownerFilter()">
+        <button class="success" id="saveAll">Save All</button>
+        <button id="exportShiftCSV">Export Shifts CSV</button>
+        <button id="exportShiftXLS">Export Shifts XLS</button>
+        <button id="exportShiftPDF">Export Shifts PDF</button>
+      </div>
+
+      <div id="ownerTableWrap" class="table-wrap card"></div>
+
+      <div class="card" id="advancesCard" style="margin-top:12px">
+        <h3>Advances</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label>Month</label><input type="month" id="advMonth">
+          <button id="showAdv">Show</button>
         </div>
-        <div style="width:360px">
-          <h4>Add Advance</h4>
-          <label>Labour</label>
-          <select id="advLab" style="width:100%"></select>
-          <label>Date</label><input id="advDate" type="date">
-          <label>Amount (₹)</label><input id="advAmt" type="number" min="0">
-          <label>Note</label><textarea id="advNote" rows="3" style="width:100%"></textarea>
-          <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
-            <button class="btn" id="saveAdv">Save Advance</button>
-            <button id="clearAdv">Clear</button>
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="flex:1">
+            <table id="advTable"><thead><tr><th>S.No</th><th>ID</th><th>Name</th><th>Total (₹)</th><th>Actions</th></tr></thead><tbody></tbody></table>
+          </div>
+          <div style="width:360px">
+            <h4>Add Advance</h4>
+            <label>Labour</label>
+            <select id="advLab" style="width:100%"></select>
+            <label>Date</label><input id="advDate" type="date">
+            <label>Amount (₹)</label><input id="advAmt" type="number" min="0">
+            <label>Note</label><textarea id="advNote" rows="3" style="width:100%"></textarea>
+            <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn" id="saveAdv">Save Advance</button>
+              <button id="clearAdv">Clear</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="card" id="salaryCard" style="margin-top:12px">
-      <h3>Salary Sheet</h3>
-      <div style="display:flex;gap:8px;align-items:center">
-        <label>Month</label>
-        <input type="month" id="salaryMonth">
-        <button id="showSalary">Show Salary</button>
-        <div style="flex:1"></div>
-        <button class="success" id="saveSalary">Save Salary Sheet</button>
-        <button id="exportSalaryCSV">Download Salary CSV</button>
-        <button id="exportSalaryXLS">Download Salary XLS</button>
-        <button id="exportSalaryPDF">Download Salary PDF</button>
+      <div class="card" id="salaryCard" style="margin-top:12px">
+        <h3>Salary Sheet</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label>Month</label>
+          <input type="month" id="salaryMonth">
+          <button id="showSalary">Show Salary</button>
+          <div style="flex:1"></div>
+          <button class="success" id="saveSalary">Save Salary Sheet</button>
+          <button id="exportSalaryCSV">Download Salary CSV</button>
+          <button id="exportSalaryXLS">Download Salary XLS</button>
+          <button id="exportSalaryPDF">Download Salary PDF</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table id="salaryTable"><thead><tr>
+            <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
+            <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
+            <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th>
+          </tr></thead><tbody></tbody></table>
+        </div>
+        <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
       </div>
-      <div class="table-wrap" style="margin-top:10px">
-        <table id="salaryTable"><thead><tr>
-          <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
-          <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-          <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th>
-        </tr></thead><tbody></tbody></table>
+
+      <hr>
+      <h3 class="small">Manage Labours</h3>
+      <div id="labourList"></div>
+    </div>
+
+    <!-- Labour Dashboard -->
+    <div class="card hidden" id="labourDashboard">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h2>Labour Portal</h2>
+        <div><button id="labourLogout">Logout</button></div>
       </div>
-      <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
+      <div id="labourInfo"></div>
+      <label>Select Month</label>
+      <input type="month" id="labourMonth" onchange="renderLabourView()">
+      <div id="labourAttendance" class="card" style="margin-top:8px"></div>
+      <div id="labourAdvance" class="card" style="margin-top:8px"></div>
+      <div id="labourSalary" class="card" style="margin-top:8px"></div>
     </div>
 
-    <hr>
-    <h3 class="small">Manage Labours</h3>
-    <div id="labourList"></div>
-  </div>
-
-  <!-- Labour Dashboard -->
-  <div class="card hidden" id="labourDashboard">
-    <div style="display:flex;align-items:center;justify-content:space-between">
-      <h2>Labour Portal</h2>
-      <div><button id="labourLogout">Logout</button></div>
-    </div>
-    <div id="labourInfo"></div>
-    <label>Select Month</label>
-    <input type="month" id="labourMonth" onchange="renderLabourView()">
-    <div id="labourAttendance" class="card" style="margin-top:8px"></div>
-    <div id="labourAdvance" class="card" style="margin-top:8px"></div>
-    <div id="labourSalary" class="card" style="margin-top:8px"></div>
-  </div>
-
-  <!-- Modal: Add/Edit Labour -->
-  <div class="card hidden" id="labourModal">
-    <h3 id="labourModalTitle">Add Labour</h3>
-    <label>User ID</label><input id="modalUserId"><br>
-    <label>Name</label><input id="modalName"><br>
-    <label>Password</label><input id="modalPwd"><br>
-    <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0"><br>
-    <div style="margin-top:10px">
-      <button class="btn" id="saveLabourBtn">Save</button>
-      <button id="cancelLabourBtn">Cancel</button>
+    <!-- Modal: Add/Edit Labour -->
+    <div class="card hidden" id="labourModal">
+      <h3 id="labourModalTitle">Add Labour</h3>
+      <label>User ID</label><input id="modalUserId"><br>
+      <label>Name</label><input id="modalName"><br>
+      <label>Password</label><input id="modalPwd"><br>
+      <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0"><br>
+      <div style="margin-top:10px">
+        <button class="btn" id="saveLabourBtn">Save</button>
+        <button id="cancelLabourBtn">Cancel</button>
+      </div>
     </div>
   </div>
-</div>
 
-<script>
+  <!-- ============================
+       FIREBASE MODULE (paste BEFORE your app script)
+       ============================ -->
+  <!-- NOTE: this is a module script so browser can use `import` for Firebase CDN modules -->
+  <script type="module">
+    // CDN imports (v9 modular). Change version if you prefer.
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
+    import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+    // <-- paste your Firebase config here (from your project settings) -->
+    const firebaseConfig = {
+      apiKey: "AIzaSyAdbV51h6y113QRi_qXFCU23UggMeS2Tyk",
+      authDomain: "vfs-labour-portal.firebaseapp.com",
+      projectId: "vfs-labour-portal",
+      storageBucket: "vfs-labour-portal.firebasestorage.app",
+      messagingSenderId: "596164397948",
+      appId: "1:596164397948:web:3203d827d6f2b92674b2f9",
+      measurementId: "G-225TDNZRFC"
+    };
+
+    // initialize firebase app & analytics
+    const app = initializeApp(firebaseConfig);
+    try { getAnalytics(app); } catch(e) { /* analytics may fail on file:// */ }
+
+    // initialize firestore and enable offline persistence (optional)
+    const db = getFirestore(app);
+    enableIndexedDbPersistence(db).catch(err => {
+      // Persistence may fail in some contexts (like multiple tabs on file://). It's safe to ignore but log.
+      console.warn('Firestore persistence not enabled:', err && err.code ? err.code : err);
+    });
+
+    // Expose the Firestore instance to the application script via window object.
+    // Your existing app script can use window.db if you want to read/write to Firestore.
+    window.db = db;
+  </script>
+
+  <!-- ============================
+       APPLICATION SCRIPT (your existing app code)
+       - Place this AFTER the firebase module above
+       - This is NOT a module script (keeps same behavior as before)
+       ============================ -->
+  <script>
 /* ===== Storage keys & seed ===== */
 const OWNER_PWD = 'vfs15254'; // demo password
 const KEY_LAB = 'labours_v4';
@@ -457,7 +454,6 @@ function salaryInputsChanged(e){
   const deductions = Number((monthlyAdvance + mess + uf + pf + debit + jvc + other).toFixed(2));
   const calcPaid = Number((totalAmt - deductions).toFixed(2));
   const paidInput = row.querySelector('.sal-paid');
-  // update paid unless user is actively editing paid (we keep simple: always set calculated)
   paidInput.value = calcPaid;
 }
 
@@ -501,6 +497,7 @@ function exportShiftCSV(){ const month = $('ownerMonth').value; if(!month){ aler
 function exportShiftXLS(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=collectShiftRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; data.rows.forEach(r=>{ html+='<tr>'; html+=`<td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td>` + r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`;}); html+='</table>'; downloadBlob('\uFEFF'+html, `shifts_${month}.xls`, 'application/vnd.ms-excel'); }
 function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=collectShiftRows(month); let html=`<html><head><meta charset="utf-8"><title>Shift sheet ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Shift sheet — ${month}</h2><table><thead><tr>`+ ['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+`</tr></thead><tbody>`; data.rows.forEach(r=>{ html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td>`+ r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`; }); html+='</tbody></table><p style="color:#666">Generated by Shift Portal</p></body></html>'; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
+/* Salary exports */
 function collectSalaryRows(month){
   const labs = getLabours(); const att = getAttendance(); const adv = getAdvances(); const sal = getSalaries();
   return labs.map((l,i)=>{
@@ -519,6 +516,7 @@ function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth'
 function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
 function exportSalaryPDF(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=collectSalaryRows(month); let html=`<html><head><meta charset="utf-8"><title>Salary ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}</style></head><body><h2>Salary sheet — ${month}</h2><table><thead><tr>`; ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].forEach(h=> html += `<th>${h}</th>`); html += `</tr></thead><tbody>`; rows.forEach(r=> html += `<tr><td>${r.sno}</td><td>${r.id}</td><td style="text-align:left;padding-left:6px">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += `</tbody></table><p style="color:#666">Generated by Salary Portal</p></body></html>`; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
+/* ===== Utility (download helper) ===== */
 function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
 /* ===== Labour management ===== */
@@ -621,6 +619,6 @@ $('exportSalaryPDF').onclick = exportSalaryPDF;
 
 /* ===== Onload initial rendering ===== */
 window.addEventListener('load', ()=>{ renderLabourList(); populateAdvSelect(); });
-</script>
+  </script>
 </body>
 </html>
