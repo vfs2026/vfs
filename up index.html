@@ -39,8 +39,15 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
   <script>
-    // <-- PASTE your firebaseConfig object here (replace the placeholder values) -->
-    const firebaseConfig = {
+  // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
   apiKey: "AIzaSyDcEu8YOAe8STAmF12YyocEQfG0saSmlps",
   authDomain: "labour-portal-87bc9.firebaseapp.com",
   projectId: "labour-portal-87bc9",
@@ -50,6 +57,9 @@
   measurementId: "G-KWMCPY4XYC"
 };
 
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
@@ -608,3 +618,4 @@ window.addEventListener('load', ()=>{ renderLabourList(); populateAdvSelect(); }
 </script>
 </body>
 </html>
+
