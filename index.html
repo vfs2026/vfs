@@ -4,51 +4,90 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Labour Shift, Advance & Salary Portal (Firestore)</title>
+
+<!-- Logo: replace with your own file name or remote URL if needed.
+     If you want a favicon (tab icon), add <link rel="icon" href="logo.png"> above.
+-->
 <style>
   :root{--sticky-id:100px;--sticky-name:260px}
   body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;color:#222}
   .wrap{max-width:1200px;margin:18px auto;padding:14px}
   .card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 6px 20px rgba(20,20,40,0.05)}
-  h1{margin:6px 0 12px;font-size:20px}
+  h1{margin:6px 0 12px;font-size:20px;display:flex;align-items:center;gap:12px}
   .row{display:flex;gap:8px;flex-wrap:wrap}
   input,select,button,textarea{font-size:14px;padding:8px;border-radius:8px;border:1px solid #d6e0ef}
+  input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   button{cursor:pointer}
   .btn{background:#0b79ff;color:#fff;border:none}
   .btn-muted{background:#6c757d;color:#fff;border:none}
   .success{background:#28a745;color:#fff;border:none}
   .danger{background:#dc3545;color:#fff;border:none}
-  table{border-collapse:collapse;width:100%;font-size:13px}
-  th,td{border:1px solid #e8eef8;padding:6px;text-align:center;white-space:nowrap}
+  table{border-collapse:collapse;width:100%;font-size:13px;background:transparent}
+  th,td{border:1px solid #e8eef8;padding:6px;text-align:center;white-space:nowrap;background:rgba(255,255,255,0.95)}
   th{background:#f3f8ff}
   .small{font-size:12px;color:#555}
   .muted{color:#666}
   .hidden{display:none}
-  .table-wrap{overflow:auto;background:#fff;padding:8px;border-radius:8px}
-  table thead th.sticky-id, table tbody td.sticky-id{ position:sticky; left:0; background:#fff; z-index:4; min-width:var(--sticky-id) }
-  table thead th.sticky-name, table tbody td.sticky-name{ position:sticky; left:var(--sticky-id); background:#fff; z-index:3; min-width:var(--sticky-name); text-align:left; padding-left:10px }
+  .table-wrap{overflow:auto;background:#fff;padding:8px;border-radius:8px; position:relative}
+  table thead th.sticky-id, table tbody td.sticky-id{ position:sticky; left:0; background:rgba(255,255,255,0.9); z-index:4; min-width:var(--sticky-id) }
+  table thead th.sticky-name, table tbody td.sticky-name{ position:sticky; left:var(--sticky-id); background:rgba(255,255,255,0.9); z-index:3; min-width:var(--sticky-name); text-align:left; padding-left:10px }
   .readonly{background:#f6f8fb}
   .left { text-align:left; padding-left:6px }
   @media (max-width:1100px){ :root{--sticky-name:160px} }
   .controls{display:flex;gap:8px;align-items:center;margin-bottom:8px}
   .search{width:260px}
-  .drag-handle { cursor:grab; padding:4px 8px; background:#f0f4ff; border-radius:6px; }
-  .dragging { opacity:0.6 }
-  .save-order { background:#ff9800; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; }
+  /* logo small */
+  .logo-small{width:36px;height:36px;background-size:contain;background-repeat:no-repeat;background-position:center;display:inline-block;vertical-align:middle}
+  /* faded background image for tables and export pages */
+  .table-bg{
+    background-image: url('logo.png'); /* change to your logo path */
+    background-position: 12px 12px;
+    background-repeat: no-repeat;
+    background-size: 48px 48px;
+    opacity: 1;
+  }
+  /* watermark for exported HTML (renders on exported pages) */
+  .export-watermark{
+    opacity:0.08;
+    position:absolute;
+    left:30px;
+    top:10px;
+    width:160px;
+    height:160px;
+    background-image:url('logo.png');
+    background-size:contain;
+    background-repeat:no-repeat;
+    pointer-events:none;
+  }
+  /* focus high z-index to avoid sticky columns covering inputs */
+  #ownerTableWrap input:focus, .table-wrap input:focus, .table-wrap select:focus, textarea:focus { z-index:999; position:relative; outline:2px solid rgba(11,121,255,0.2) }
+  /* small responsive tweak */
+  @media (max-width:700px){
+    .search{width:160px}
+  }
 </style>
+
+<!-- jsPDF + html2canvas for PDF downloads -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 </head>
 <body>
 <div class="wrap">
   <div class="card" id="homeCard">
-    <h1>Labour Shift, Advance & Salary Portal (Firestore)</h1>
+    <h1>
+      <span class="logo-small" id="pageLogo" style="background-image:url('logo.png');"></span>
+      Owner Dashboard
+    </h1>
     <div class="row">
       <button class="btn" id="ownerBtn">Owner Login</button>
       <button class="btn-muted" id="labourBtn">Labour Login</button>
       <div style="flex:1"></div>
     </div>
-    <p class="small muted">Owner must sign in to perform saves (Firestore writes).</p>
+    <p class="small muted">Owner must sign in to perform saves (Firestore writes). Serve this page over HTTP (localhost) for Firebase to work correctly.</p>
   </div>
 
-  <!-- Owner Login (email/password using Firebase Auth) -->
+  <!-- Owner Login -->
   <div class="card hidden" id="ownerLoginCard">
     <h3>Owner Login (Firebase)</h3>
     <label>Email</label><br>
@@ -62,7 +101,7 @@
     <div id="ownerAuthMsg" class="small muted" style="margin-top:8px"></div>
   </div>
 
-  <!-- Labour Login (ID only) -->
+  <!-- Labour Login -->
   <div class="card hidden" id="labourLoginCard">
     <h3>Labour Login (ID only)</h3>
     <label>User ID</label><br>
@@ -75,7 +114,7 @@
   </div>
 
   <!-- Owner Dashboard -->
-  <div class="card hidden" id="ownerDashboard">
+  <div class="card hidden table-bg" id="ownerDashboard">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <h2>Owner Dashboard</h2>
       <div><button id="ownerLogout">Sign Out</button></div>
@@ -96,7 +135,9 @@
       <button id="exportShiftPDF">Export Shifts PDF</button>
     </div>
 
-    <div id="ownerTableWrap" class="table-wrap card"></div>
+    <div id="ownerTableWrap" class="table-wrap card" style="min-height:120px; position:relative">
+      <div class="export-watermark" aria-hidden="true"></div>
+    </div>
 
     <div class="card" id="advancesCard" style="margin-top:12px">
       <h3>Advances</h3>
@@ -115,10 +156,15 @@
         </div>
         <div style="width:360px">
           <h4>Add Advance</h4>
-          <label>Labour</label>
+          <label>Search Labour</label>
+          <input id="advSearch" list="advList" placeholder="Type ID or name to search" style="width:100%" />
+          <datalist id="advList"></datalist>
+
+          <label style="margin-top:6px">Labour (selected)</label>
           <select id="advLab" style="width:100%"></select>
+
           <label>Date</label><input id="advDate" type="date">
-          <label>Amount (₹)</label><input id="advAmt" type="number" min="0">
+          <label>Amount (₹)</label><input id="advAmt" type="number" min="0" step="0.1" placeholder="e.g. 12.5">
           <label>Note</label><textarea id="advNote" rows="3" style="width:100%"></textarea>
           <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" id="saveAdv">Save Advance</button>
@@ -140,11 +186,12 @@
         <button id="exportSalaryXLS">Download Salary XLS</button>
         <button id="exportSalaryPDF">Download Salary PDF</button>
       </div>
-      <div class="table-wrap" style="margin-top:10px">
+      <div class="table-wrap" style="margin-top:10px;position:relative">
+        <div class="export-watermark" aria-hidden="true"></div>
         <table id="salaryTable"><thead><tr>
           <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
           <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-          <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Sign</th>
+          <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Signature</th>
         </tr></thead><tbody></tbody></table>
       </div>
       <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
@@ -152,15 +199,10 @@
 
     <hr>
     <h3 class="small">Manage Labours</h3>
-
-    <!-- Added Fix Order + Save Order controls -->
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <button id="fixOrderBtn" class="save-order">Fix Order (persist S.No)</button>
-      <button id="saveOrderBtn" class="save-order hidden">Save Order</button>
-      <div style="flex:1"></div>
-      <span class="small muted">Drag rows to reorder. Click Save Order or Fix Order to persist.</span>
+    <div style="margin-bottom:8px">
+      <button id="fixOrder">Fix Order (save current order)</button>
+      <small class="muted"> (After reordering rows, click Fix Order to store ordering)</small>
     </div>
-
     <div id="labourList"></div>
   </div>
 
@@ -184,7 +226,7 @@
     <label>User ID</label><input id="modalUserId"><br>
     <label>Name</label><input id="modalName"><br>
     <label>Password</label><input id="modalPwd"><br>
-    <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0"><br>
+    <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0" step="0.1"><br>
     <!-- NEW: Payment mode -->
     <label>Payment Mode</label>
     <select id="modalPayMode" style="width:120px">
@@ -205,7 +247,7 @@
 
 <script>
 /* ---------------------------
-  Put your firebase config here
+  Replace firebaseConfig with your project's config
 ---------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyD4Ax31xHSiW4d4j-YgwcmvH1kPc4OrUoU",
@@ -220,8 +262,8 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-/* OWNER UID — set to the UID you created in Firebase Auth */
-const OWNER_UID = 'D0iiwtC6w9O9qImWLQUXDxKP7lc2'; // <-- replace with your owner UID if different
+/* OWNER UID — replace with your owner UID from Firebase Auth */
+const OWNER_UID = 'D0iiwtC6w9O9qImWLQUXDxKP7lc2'; // <-- replace if needed
 
 /* ===== Simple DOM helper ===== */
 const $ = id => document.getElementById(id);
@@ -277,18 +319,16 @@ $('labourLogout').onclick = ()=> location.reload();
 /* ========== Firestore helper functions ========== */
 
 /* Labours collection: doc id = labour id
-   NOTE: we fetch all and sort client-side by order/createdAt/id so ordering is controlled by the 'order' field */
+   We store createdAt timestamp so latest-added appear at the end.
+*/
 async function fetchAllLabours(){
-  const snap = await db.collection('labours').get();
-  const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  // sort by order (numeric, ascending). If missing, fallback to createdAt (timestamp), else id
-  docs.sort((a,b) => {
-    const ao = a.order !== undefined ? Number(a.order) : (a.createdAt ? (a.createdAt.seconds || 0) : 0);
-    const bo = b.order !== undefined ? Number(b.order) : (b.createdAt ? (b.createdAt.seconds || 0) : 0);
-    if(ao === bo) return (a.id || '').localeCompare(b.id || '');
-    return ao - bo;
+  // order by createdAt asc (oldest first). If createdAt missing, fallback to id order.
+  const snap = await db.collection('labours').orderBy('createdAt','asc').get().catch(async ()=>{
+    // older docs may not have createdAt; fallback:
+    const s = await db.collection('labours').orderBy('id').get();
+    return s;
   });
-  return docs;
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
 }
 async function fetchLabourById(id){
   const d = await db.collection('labours').doc(id).get();
@@ -297,35 +337,40 @@ async function fetchLabourById(id){
 }
 async function saveLabourToFirestore(lab){
   // lab: {id,name,password,rate,paymentMode}
-  const ref = db.collection('labours').doc(lab.id);
-  // If creating new doc, set createdAt and order fallback to server timestamp
-  const now = firebase.firestore.FieldValue.serverTimestamp();
-  await ref.set({
+  const payload = {
     name: lab.name || '',
     password: lab.password || '',
     rate: Number(lab.rate) || 0,
     paymentMode: lab.paymentMode || 'Cash',
-    id: lab.id,
-    createdAt: now,
-    // don't overwrite order if editing (only set on new save if not present)
-  }, {merge:true});
+    id: lab.id
+  };
+  // set createdAt if new
+  const docRef = db.collection('labours').doc(lab.id);
+  const doc = await docRef.get();
+  if(!doc.exists){
+    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  }
+  await docRef.set(payload, {merge:true});
 }
 async function deleteLabourFromFirestore(id){
   // Delete doc and associated attendance/advances/salaries docs (best-effort)
   await db.collection('labours').doc(id).delete();
+  // attendance docs named id_month; delete any doc with id prefix id_
   const attAll = await db.collection('attendance').get();
   const batch = db.batch();
   attAll.docs.forEach(doc => {
     if(doc.id.startsWith(id + '_')) batch.delete(doc.ref);
   });
-  const advDoc = db.collection('advances').doc(id);
-  batch.delete(advDoc);
+  // advances doc named id
+  batch.delete(db.collection('advances').doc(id));
   const salAll = await db.collection('salaries').get();
   salAll.docs.forEach(doc => { if(doc.id.startsWith(id + '_')) batch.delete(doc.ref); });
   await batch.commit();
 }
 
-/* Attendance docs */
+/* Attendance docs: id = `${labId}_${month}` with { shifts: { day: num }, rate }
+   Example doc id: "L001_2025-12"
+*/
 async function fetchAttendance(labId, month){
   const id = `${labId}_${month}`;
   const d = await db.collection('attendance').doc(id).get();
@@ -339,17 +384,18 @@ async function saveAttendanceForMonth(attObjMap){
   await batch.commit();
 }
 
-/* Advances */
+/* Advances docs: id = labour id, structure: { items: [ {date, amount, note} ] } */
 async function fetchAdvancesForLab(labId){
   const d = await db.collection('advances').doc(labId).get();
   return d.exists ? (d.data().items || []) : [];
 }
 async function appendAdvanceForLab(labId, advanceItem){
+  // advanceItem: {date, amount, note}
   const ref = db.collection('advances').doc(labId);
   await ref.set({ items: firebase.firestore.FieldValue.arrayUnion(advanceItem) }, {merge:true});
 }
 
-/* Salaries */
+/* Salaries docs: id = `${labId}_${month}` with salary fields */
 async function fetchSalary(labId, month){
   const id = `${labId}_${month}`;
   const d = await db.collection('salaries').doc(id).get();
@@ -360,22 +406,8 @@ async function saveSalaryRecord(labId, month, payload){
   await db.collection('salaries').doc(id).set(payload, {merge:true});
 }
 
-/* Helper: collect attendance rows */
-async function collectAttendanceForMonth(month){
-  const labs = await fetchAllLabours();
-  const rows = [];
-  for(const [i,l] of labs.entries()){
-    const key = `${l.id}_${month}`;
-    const doc = await db.collection('attendance').doc(key).get();
-    const rec = doc.exists ? doc.data() : {shifts:{}};
-    rows.push({ sno: i+1, id: l.id, name: l.name, shifts: rec.shifts || {}, rate: rec.rate || l.rate });
-  }
-  return { rows, labs };
-}
+/* ===== UI functions that use Firestore ===== */
 
-/* ========== UI functions that use Firestore ========== */
-
-/* Init owner view */
 async function initOwnerView(){
   $('ownerMonth').value = (new Date()).toISOString().slice(0,7);
   $('advMonth').value = $('ownerMonth').value;
@@ -387,7 +419,7 @@ async function initOwnerView(){
   await renderSalarySheet();
 }
 
-/* Owner attendance generation */
+/* Generate owner attendance table */
 async function generateOwnerTable(){
   const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; }
   const days = getDays(month);
@@ -404,22 +436,35 @@ async function generateOwnerTable(){
   labs.forEach((l,i)=>{
     const rec = attMap[l.id] || {shifts:{}, rate:l.rate};
     let total = 0;
-    html += `<tr data-id="${l.id}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
-    days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; html += `<td><input type="number" step="0.01" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:68px"></td>`;});
+    html += `<tr data-id="${l.id}" data-row="${i}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
+    days.forEach(d=>{
+      const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0;
+      total += Number(v)||0;
+      // step="0.1" to allow decimals; onchange/blur will normalize
+      html += `<td><input type="number" step="0.1" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:68px"></td>`;
+    });
     html += `<td class="rowTotal">${total}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}','${month}')">View</button></td></tr>`;
   });
   html += '</tbody></table>';
   $('ownerTableWrap').innerHTML = html;
-  document.querySelectorAll('.attCell').forEach(i => i.addEventListener('input', ()=>{ updateRowTotals(); ownerFilter(); }));
-  enableCellArrowNavigation(); // keep arrow navigation for shift cells
+  // fill input behaviors
+  document.querySelectorAll('.attCell').forEach(i=>{
+    // auto select text on focus
+    i.addEventListener('focus', e => { try{ e.target.select(); }catch(e){} });
+    // allow decimals with '.' and arrow navigation
+    i.addEventListener('keydown', attCellKeyHandler);
+    // on input, update totals
+    i.addEventListener('input', ()=>{ updateRowTotals(); ownerFilter(); });
+  });
   updateRowTotals();
 }
 $('loadTable').onclick = generateOwnerTable;
 
 function updateRowTotals(){
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
-    let s = 0; tr.querySelectorAll('.attCell').forEach(ci=> s += Number(ci.value) || 0);
-    const cell = tr.querySelector('.rowTotal'); if(cell) cell.textContent = s;
+    let s = 0;
+    tr.querySelectorAll('.attCell').forEach(ci=> s += Number(ci.value) || 0);
+    const cell = tr.querySelector('.rowTotal'); if(cell) cell.textContent = Number(s).toFixed(2);
   });
 }
 
@@ -444,7 +489,7 @@ $('saveAll').onclick = async ()=>{
   }
 };
 
-/* Owner search */
+/* Search */
 function ownerFilter(){
   const q = $('ownerSearch').value.trim().toLowerCase();
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
@@ -456,12 +501,21 @@ function ownerFilter(){
 /* Advances UI */
 async function populateAdvSelect(){
   const sel = $('advLab'); sel.innerHTML = '';
+  const dl = $('advList'); dl.innerHTML = '';
   const labs = await fetchAllLabours();
   labs.forEach(l => {
     const o = document.createElement('option'); o.value = l.id; o.textContent = l.id + ' - ' + l.name; sel.appendChild(o);
+    // for datalist search
+    const d = document.createElement('option'); d.value = `${l.id} - ${l.name}`; dl.appendChild(d);
   });
+  // when advSearch changes, set advLab accordingly
+  $('advSearch').oninput = function(){
+    const v = this.value.trim();
+    if(!v) return;
+    const match = labs.find(x => `${x.id} - ${x.name}`.toLowerCase().startsWith(v.toLowerCase()) || x.id.toLowerCase() === v.toLowerCase());
+    if(match) $('advLab').value = match.id;
+  };
 }
-
 $('showAdv').onclick = renderAdvances;
 
 async function renderAdvances(){
@@ -487,19 +541,19 @@ $('saveAdv').onclick = async ()=>{
   if(!lab || !date || amt <= 0){ alert('Select labour, date and amount'); return; }
   try{
     await appendAdvanceForLab(lab, {date, amount: amt, note});
+    // scroll back to top after save
+    window.scrollTo({top:0, behavior:'smooth'});
     $('advDate').value=''; $('advAmt').value=''; $('advNote').value='';
     await renderAdvances(); await renderSalarySheet();
-    // scroll back to top after saving (per your earlier request)
-    window.scrollTo({top:0, behavior:'smooth'});
     alert('Advance saved to Firestore');
   } catch(err){
     alert('Save advance failed: ' + err.message);
   }
 };
 $('clearAdv').onclick = ()=>{ $('advDate').value=''; $('advAmt').value=''; $('advNote').value=''; };
-function prefillAdv(id){ $('advLab').value = id; $('advDate').value = (new Date()).toISOString().slice(0,10); window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); }
+function prefillAdv(id){ $('advLab').value = id; $('advDate').value = (new Date()).toISOString().slice(0,10); $('advAmt').focus(); window.scrollTo({top:document.getElementById('advancesCard').offsetTop - 20, behavior:'smooth'}); }
 
-/* View advances (open tab) */
+/* View advances (open page HTML then download via jsPDF if requested) */
 async function viewAdvances(id, month){
   const items = await fetchAdvancesForLab(id);
   let list = items;
@@ -517,8 +571,9 @@ async function viewAdvances(id, month){
   const w = window.open('', '_blank'); w.document.write(html); w.document.close();
 }
 
-/* Salary sheet UI */
+/* Salary sheet UI (reads from Firestore) */
 $('showSalary').onclick = renderSalarySheet;
+
 async function renderSalarySheet(){
   const month = $('salaryMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; }
   const labs = await fetchAllLabours();
@@ -540,24 +595,24 @@ async function renderSalarySheet(){
     const paymentMode = saved.paymentMode || l.paymentMode || 'Cash';
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>
-      <td><input class="sal-amt" data-id="${l.id}" value="${amtPerShift}" style="width:90px"></td>
+      <td><input class="sal-amt" data-id="${l.id}" value="${amtPerShift}" style="width:90px" step="0.1" type="number"></td>
       <td><input class="sal-totalShift readonly" data-id="${l.id}" value="${totalShift}" readonly style="width:90px"></td>
       <td><input class="sal-totalAmt readonly" data-id="${l.id}" value="${totalAmt}" readonly style="width:110px"></td>
       <td><input class="sal-monthlyAdvance readonly" data-id="${l.id}" value="${monthlyAdvance}" readonly style="width:110px"></td>
-      <td><input class="sal-mess" data-id="${l.id}" value="${mess}" style="width:90px"></td>
-      <td><input class="sal-uf" data-id="${l.id}" value="${uf}" style="width:90px"></td>
-      <td><input class="sal-pf" data-id="${l.id}" value="${pf}" style="width:90px"></td>
-      <td><input class="sal-debit" data-id="${l.id}" value="${debit}" style="width:90px"></td>
-      <td><input class="sal-jvc" data-id="${l.id}" value="${jvc}" style="width:90px"></td>
-      <td><input class="sal-other" data-id="${l.id}" value="${other}" style="width:90px"></td>
+      <td><input class="sal-mess" data-id="${l.id}" value="${mess}" style="width:90px" step="0.1" type="number"></td>
+      <td><input class="sal-uf" data-id="${l.id}" value="${uf}" style="width:90px" step="0.1" type="number"></td>
+      <td><input class="sal-pf" data-id="${l.id}" value="${pf}" style="width:90px" step="0.1" type="number"></td>
+      <td><input class="sal-debit" data-id="${l.id}" value="${debit}" style="width:90px" step="0.1" type="number"></td>
+      <td><input class="sal-jvc" data-id="${l.id}" value="${jvc}" style="width:90px" step="0.1" type="number"></td>
+      <td><input class="sal-other" data-id="${l.id}" value="${other}" style="width:90px" step="0.1" type="number"></td>
       <td>
         <select class="sal-paymode" data-id="${l.id}" style="width:100px">
           <option value="Cash"${paymentMode === 'Cash' ? ' selected' : ''}>Cash</option>
           <option value="A/c"${paymentMode === 'A/c' ? ' selected' : ''}>A/c</option>
         </select>
       </td>
-      <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px"></td>
-      <td><input class="sal-remarks" data-id="${l.id}" value="${(saved.remarks||'')}" style="width:140px"></td>`;
+      <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px" step="0.1" type="number"></td>
+      <td><input class="sal-remarks" data-id="${l.id}" value="${saved.remarks || ''}" style="width:160px"></td>`;
     tbody.appendChild(tr);
   }
   document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => inp.addEventListener('input', salaryInputsChanged));
@@ -582,6 +637,7 @@ function salaryInputsChanged(e){
   const deductions = Number((monthlyAdvance + mess + uf + pf + debit + jvc + other).toFixed(2));
   const calcPaid = Number((totalAmt - deductions).toFixed(2));
   const paidInput = row.querySelector('.sal-paid');
+  // Only auto-update paid if user didn't override: we will always set to calcPaid for ease (owner can edit and save)
   paidInput.value = calcPaid;
 }
 
@@ -606,7 +662,7 @@ $('saveSalary').onclick = async ()=>{
         other: Number(r.querySelector('.sal-other').value) || 0,
         paymentMode: r.querySelector('.sal-paymode').value || '',
         paid: Number(r.querySelector('.sal-paid').value) || 0,
-        remarks: r.querySelector('.sal-remarks') ? r.querySelector('.sal-remarks').value : ''
+        remarks: r.querySelector('.sal-remarks')?.value || ''
       };
       await saveSalaryRecord(id, month, payload);
     }
@@ -616,122 +672,181 @@ $('saveSalary').onclick = async ()=>{
   }
 };
 
-/* Export helpers (attendance/salary/advances) */
-/* ... Keep your previous export functions (not repeated here to keep file concise) */
+/* Export helpers (attendance/salary/adv) */
 
-/* For brevity, re-use earlier export functions from your project — they will respect the new ordering because fetchAllLabours() now returns labours sorted by order. */
-/* (You can keep exportShiftCSV/exportShiftXLS/exportShiftPDF/exportSalaryCSV/exportSalaryXLS/exportSalaryPDF/exportAdvCSV/exportAdvXLS/exportAdvPDF from previous file — unchanged.) */
-
-/* ===== LABOUR MANAGEMENT + DRAG REORDER ===== */
-
-async function renderLabourList(){
+// collect shift rows
+async function collectShiftRows(month){
   const labs = await fetchAllLabours();
-  // produce draggable table
-  let html = '<table id="manageLabours"><thead><tr><th>S.No</th><th></th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Payment Mode</th><th>Actions</th></tr></thead><tbody>';
-  labs.forEach((l,i)=>{
-    html += `<tr draggable="true" data-id="${l.id}">
-      <td class="sno">${i+1}</td>
-      <td class="drag-handle">☰</td>
-      <td>${l.id}</td>
-      <td class="left">${l.name}</td>
-      <td>₹${l.rate}</td>
-      <td>${l.paymentMode || 'Cash'}</td>
-      <td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td>
-    </tr>`;
-  });
-  html += '</tbody></table>';
-  $('labourList').innerHTML = html;
-  enableDragReorder(); // initialize drag handlers
+  const rows = [];
+  for(const [i,l] of labs.entries()){
+    const key = `${l.id}_${month}`;
+    const doc = await db.collection('attendance').doc(key).get();
+    const rec = doc.exists ? doc.data() : {shifts:{}};
+    const days = getDays(month);
+    const dayVals = [];
+    let tot=0;
+    for(const d of days){ const v = Number(rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0) || 0; dayVals.push(v); tot += v; }
+    rows.push({sno:i+1, id:l.id, name:l.name, days: dayVals, total: tot});
+  }
+  return {rows, days: getDays(month)};
+}
+async function exportShiftCSV(){ const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; } const data=await collectShiftRows(month); const header=['S.No','User ID','Name', ...data.days.map(String), 'Total']; const csv=[header.join(',')].concat(data.rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, ...r.days, r.total].join(','))).join('\n'); downloadBlob(csv, `shifts_${month}.csv`, 'text/csv'); }
+async function exportShiftXLS(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; data.rows.forEach(r=>{ html+='<tr>'; html+=`<td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td>` + r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`;}); html+='</table>'; downloadBlob('\uFEFF'+html, `shifts_${month}.xls`, 'application/vnd.ms-excel'); }
+async function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); // build html and use html2canvas+jspdf to generate file
+  const html = buildExportHtml(`Shift sheet — ${month}`, ['S.No','User ID','Name',...data.days.map(String),'Total'], data.rows.map(r=> [r.sno, r.id, r.name, ...r.days, r.total]));
+  await downloadHtmlAsPdf(html, `shifts_${month}.pdf`);
 }
 
-/* enable drag & drop on labour list */
-function enableDragReorder(){
-  const tbody = document.querySelector('#manageLabours tbody');
-  if(!tbody) return;
-  let dragEl = null;
+/* COLLECT SALARY ROWS (with paymentMode) */
+async function collectSalaryRows(month){
+  const labs = await fetchAllLabours(); const rows = [];
+  for(const [i,l] of labs.entries()){
+    const att = await fetchAttendance(l.id, month);
+    const totalShift = Object.values(att.shifts||{}).reduce((s,v)=> s + (Number(v)||0), 0);
+    const saved = await fetchSalary(l.id, month) || {};
+    const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (att.rate || l.rate)) || Number(l.rate||0);
+    const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
+    const advItems = await fetchAdvancesForLab(l.id);
+    const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
+    const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0), debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
+    const paid = Number(saved.paid !== undefined ? saved.paid : (totalAmt - (advTotal + mess + uf + pf + debit + jvc + other))).toFixed(2);
+    const paymentMode = (saved.paymentMode || l.paymentMode || '').toString();
+    rows.push({sno:i+1, id:l.id, name:l.name, amtPerShift, totalShift, totalAmt, monthlyAdvance: advTotal, mess, uf, pf, debit, jvc, other, paymentMode, paid});
+  }
+  return rows;
+}
+async function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); const header=['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary']; const csv=[header.join(',')].concat(rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, `"${r.paymentMode}"`, r.paid].join(','))).join('\n'); downloadBlob(csv, `salary_${month}.csv`, 'text/csv'); }
+async function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
 
-  tbody.querySelectorAll('tr').forEach(tr=>{
-    tr.addEventListener('dragstart', (e)=>{
-      dragEl = tr;
-      tr.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', tr.dataset.id); } catch(e){}
+/* Export salary PDF (A/c first, then Cash) */
+async function exportSalaryPDF(){
+  const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;}
+  const rows=await collectSalaryRows(month);
+  // split ac and cash
+  const acRows = rows.filter(r => (r.paymentMode||'').toString().toLowerCase().includes('a/c'));
+  const cashRows = rows.filter(r => !(r.paymentMode||'').toString().toLowerCase().includes('a/c'));
+  const htmlA = buildExportHtml(`Salary - ${month} (A/c)`, ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'], acRows.map(r => [r.sno, r.id, r.name, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, r.paymentMode, r.paid]));
+  const htmlC = buildExportHtml(`Salary - ${month} (Cash)`, ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'], cashRows.map(r => [r.sno, r.id, r.name, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, r.paymentMode, r.paid]));
+  // combine both exports into one PDF (ac first)
+  const combinedHtml = `<div>${htmlA}</div><div style="page-break-before:always">${htmlC}</div>`;
+  await downloadHtmlAsPdf(combinedHtml, `salary_${month}.pdf`);
+}
+
+/* Advances export functions */
+async function collectAdvForMonth(month){
+  const labs = await fetchAllLabours();
+  const rows = [];
+  for(const [i,l] of labs.entries()){
+    const items = await fetchAdvancesForLab(l.id);
+    const filtered = items.filter(a => a.date && a.date.startsWith(month));
+    for(const f of filtered){
+      rows.push({sno: rows.length+1, id: l.id, name: l.name, date: f.date, amount: Number(f.amount)||0, note: f.note||''});
+    }
+  }
+  return rows;
+}
+async function exportAdvCSV(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); const header = ['S.No','User ID','Name','Date','Amount','Note']; const csv = [header.join(',')].concat(rows.map(r => [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.date, r.amount, `"${(r.note||'').replace(/"/g,'""')}"`].join(','))).join('\n'); downloadBlob(csv, `advances_${month}.csv`, 'text/csv'); }
+async function exportAdvXLS(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); let html = '<table border="1"><tr>' + ['S.No','User ID','Name','Date','Amount','Note'].map(h=>`<th>${h}</th>`).join('') + '</tr>'; rows.forEach(r => { html += `<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.date}</td><td>${r.amount}</td><td>${r.note}</td></tr>`; }); html += '</table>'; downloadBlob('\uFEFF'+html, `advances_${month}.xls`, 'application/vnd.ms-excel'); }
+async function exportAdvPDF(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); const html = buildExportHtml(`Advances — ${month}`, ['S.No','User ID','Name','Date','Amount','Note'], rows.map(r=> [r.sno, r.id, r.name, r.date, r.amount, r.note])); await downloadHtmlAsPdf(html, `advances_${month}.pdf`); }
+
+/* utility: build HTML table string for export pages (includes watermark) */
+function buildExportHtml(title, headers, rows){
+  let html = `<html><head><meta charset="utf-8"><title>${title}</title><style>
+    body{font-family:Arial,Helvetica,sans-serif;color:#222;padding:18px}
+    h2{margin-bottom:6px}
+    table{border-collapse:collapse;width:100%;margin-top:8px}
+    th,td{border:1px solid #333;padding:6px;text-align:center;font-size:12px}
+    th{background:#eee}
+    td.left{text-align:left;padding-left:6px}
+    .watermark{opacity:0.06;position:fixed;left:40px;top:20px;width:220px;height:220px;background-image:url('logo.png');background-size:contain;background-repeat:no-repeat}
+    @media print{ table{page-break-inside:auto} tr{page-break-inside:avoid;page-break-after:auto} }
+    </style></head><body><div class="watermark"></div><h2>${title}</h2><table><thead><tr>`;
+  headers.forEach(h=> html += `<th>${h}</th>`);
+  html += `</tr></thead><tbody>`;
+  rows.forEach(r => {
+    html += '<tr>';
+    r.forEach((c,ci) => {
+      const content = (typeof c === 'string') ? c.replace(/</g,'&lt;') : c;
+      html += (ci===2 ? `<td class="left">${content}</td>` : `<td>${content}</td>`);
     });
-    tr.addEventListener('dragend', ()=>{
-      if(dragEl) dragEl.classList.remove('dragging');
-      dragEl = null;
-    });
-    tr.addEventListener('dragover', (e)=>{
+    html += '</tr>';
+  });
+  html += '</tbody></table></body></html>';
+  return html;
+}
+
+/* generate PDF from HTML string using html2canvas + jsPDF and download */
+async function downloadHtmlAsPdf(htmlString, filename){
+  // create hidden container
+  const container = document.createElement('div');
+  container.style.width = '1200px';
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.innerHTML = htmlString;
+  document.body.appendChild(container);
+  // give browser a moment to render
+  await new Promise(r => setTimeout(r, 350));
+  // capture
+  const canvas = await html2canvas(container, { scale:2, useCORS:true, allowTaint:false });
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
+  pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+  pdf.save(filename);
+  container.remove();
+}
+
+/* download blob helper */
+function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+
+/* ===== Labour management (owner-only) ===== */
+async function renderLabourList(){
+  const labs = await fetchAllLabours();
+  // Render list in recorded order (createdAt asc) — last added will appear last
+  let html='<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Payment Mode</th><th>Actions</th></tr></thead><tbody>';
+  labs.forEach((l,i)=> html += `<tr draggable="true"><td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td>${l.paymentMode || 'Cash'}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`);
+  html += '</tbody></table>';
+  $('labourList').innerHTML = html;
+
+  // simple drag & drop reorder for visual ordering (owner can click Fix Order to persist new order)
+  const table = $('labourList').querySelector('table');
+  enableDragToReorder(table);
+}
+$('addLabour').onclick = ()=> { openLabourModal(); window.scrollTo({top:document.getElementById('labourModal').offsetTop - 10, behavior:'smooth'}); };
+
+function enableDragToReorder(table){
+  if(!table) return;
+  let dragSrc = null;
+  table.querySelectorAll('tbody tr').forEach(tr=>{
+    tr.addEventListener('dragstart', e => { dragSrc = tr; tr.style.opacity='0.4'; });
+    tr.addEventListener('dragend', e => { tr.style.opacity='1'; });
+    tr.addEventListener('dragover', e => { e.preventDefault(); });
+    tr.addEventListener('drop', e => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      const target = e.currentTarget;
-      if(!dragEl || target === dragEl) return;
-      // insert before or after based on mouse position
-      const rect = target.getBoundingClientRect();
-      const offset = e.clientY - rect.top;
-      const insertBefore = offset < rect.height / 2;
-      if(insertBefore) target.parentNode.insertBefore(dragEl, target);
-      else target.parentNode.insertBefore(dragEl, target.nextSibling);
-      refreshLabourSnos();
-      $('saveOrderBtn').classList.remove('hidden'); // show Save Order button
-    });
-    // keyboard support: optionally allow arrow keys while focused on row
-    tr.tabIndex = 0;
-    tr.addEventListener('keydown', (e)=>{
-      if(e.key === 'ArrowUp' || e.key === 'ArrowDown'){
-        e.preventDefault();
-        const prev = tr.previousElementSibling;
-        const next = tr.nextElementSibling;
-        if(e.key === 'ArrowUp' && prev) tr.parentNode.insertBefore(tr, prev);
-        if(e.key === 'ArrowDown' && next) tr.parentNode.insertBefore(next, tr);
-        refreshLabourSnos();
-        $('saveOrderBtn').classList.remove('hidden');
+      if(dragSrc && dragSrc !== tr){
+        const tbody = table.querySelector('tbody');
+        tbody.insertBefore(dragSrc, tr.nextSibling);
       }
     });
   });
 }
 
-/* recompute S.No in labour list UI after reorder */
-function refreshLabourSnos(){
-  const rows = document.querySelectorAll('#manageLabours tbody tr');
-  rows.forEach((r,i)=> {
-    const cell = r.querySelector('.sno');
-    if(cell) cell.textContent = i+1;
-  });
-}
-
-/* persist the order to Firestore based on current DOM order (S.No) */
-async function persistLabourOrder(){
-  if(!isOwnerSignedIn()){ alert('Owner sign-in required to save order.'); return; }
-  const rows = document.querySelectorAll('#manageLabours tbody tr');
-  const batch = db.batch();
-  rows.forEach((r, idx) => {
-    const id = r.dataset.id;
-    if(!id) return;
-    const ref = db.collection('labours').doc(id);
-    batch.update(ref, { order: idx+1 });
-  });
+/* Fix Order: write 'order' field to labours collection based on current table order */
+$('fixOrder').onclick = async ()=>{
+  if(!isOwnerSignedIn()){ alert('Owner sign-in required'); return; }
+  const rows = Array.from(document.querySelectorAll('#labourList table tbody tr'));
+  if(!rows.length) return alert('No labours to fix order.');
   try{
+    const batch = db.batch();
+    for(let i=0;i<rows.length;i++){
+      const id = rows[i].cells[1].textContent.trim();
+      batch.set(db.collection('labours').doc(id), { order: i+1, createdAt: firebase.firestore.FieldValue.serverTimestamp() }, {merge:true});
+    }
     await batch.commit();
-    // re-render owner tables to reflect new order
-    await initOwnerView();
-    $('saveOrderBtn').classList.add('hidden');
-    alert('Order persisted. S.No updated across Attendance/Advance/Salary tables.');
-  } catch(err){
-    alert('Failed to save order: ' + err.message);
-  }
-}
-
-/* Fix Order button: simply calls persistLabourOrder for current UI order */
-$('fixOrderBtn').onclick = async ()=>{
-  // Ensure we have a rendered list; if not, render then persist
-  if(!document.querySelector('#manageLabours tbody')) await renderLabourList();
-  await persistLabourOrder();
+    alert('Order saved.');
+    await renderLabourList();
+  } catch(err){ alert('Failed to save order: ' + err.message); }
 };
-$('saveOrderBtn').onclick = persistLabourOrder;
-
-/* ===== Labour modal / editing (unchanged) ===== */
-$('addLabour').onclick = ()=> openLabourModal();
 
 function openLabourModal(editId){
   $('labourModal').classList.remove('hidden');
@@ -741,19 +856,18 @@ function openLabourModal(editId){
       $('modalUserId').value = lab.id; $('modalName').value = lab.name; $('modalPwd').value = lab.password; $('modalRate').value = lab.rate;
       $('modalPayMode').value = lab.paymentMode || 'Cash';
       $('labourModal').dataset.edit = editId;
-      // scroll into view
-      $('labourModal').scrollIntoView({behavior:'smooth', block:'center'});
+      window.scrollTo({top:document.getElementById('labourModal').offsetTop - 10, behavior:'smooth'});
     }).catch(()=>{ alert('Failed to fetch labour'); });
   } else {
     $('labourModalTitle').textContent = 'Add Labour';
     $('modalUserId').value=''; $('modalName').value=''; $('modalPwd').value='1234'; $('modalRate').value='500';
     $('modalPayMode').value = 'Cash';
     delete $('labourModal').dataset.edit;
-    $('labourModal').scrollIntoView({behavior:'smooth', block:'center'});
+    window.scrollTo({top:document.getElementById('labourModal').offsetTop - 10, behavior:'smooth'});
   }
 }
 function openEditLabour(id){ openLabourModal(id); }
-$('cancelLabourBtn').onclick = ()=> { $('labourModal').classList.add('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+$('cancelLabourBtn').onclick = ()=> { $('labourModal').classList.add('hidden'); window.scrollTo({top:0, behavior:'smooth'}); };
 
 $('saveLabourBtn').onclick = async ()=>{
   if(!isOwnerSignedIn()){ alert('Owner sign-in required'); return; }
@@ -762,13 +876,8 @@ $('saveLabourBtn').onclick = async ()=>{
   if(!id||!name){ alert('Enter ID and name'); return; }
   try{
     await saveLabourToFirestore({id, name, password: pwd, rate, paymentMode});
-    $('labourModal').classList.add('hidden');
-    // after create, refresh list so new labour appears at bottom (we will re-fetch and sort by order/createdAt)
-    await renderLabourList();
-    await generateOwnerTable();
-    await populateAdvSelect();
-    await renderSalarySheet();
-    window.scrollTo({top:0,behavior:'smooth'});
+    $('labourModal').classList.add('hidden'); await renderLabourList(); await generateOwnerTable(); await populateAdvSelect(); await renderSalarySheet();
+    window.scrollTo({top:0, behavior:'smooth'});
     alert('Saved');
   } catch(err){ alert('Save failed: ' + err.message); }
 };
@@ -798,7 +907,7 @@ async function renderLabourView(){
   const advItemsAll = await fetchAdvancesForLab(currentLabour.id);
   const advList = advItemsAll.filter(a=> a.date && a.date.startsWith(month)).sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
   let advHtml = '<h3>Advances</h3>';
-  if(!advList.length) advHtml += '<p class="small">No advances for month</p>'; else { advHtml += '<table><thead><tr><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>'; advList.slice().reverse().forEach(a=> advHtml += `<tr><td>${a.date}</td><td style="text-align:right">₹${a.amount}</td><td class="left">${a.note||''}</td></tr>`); advHtml += '</tbody></table>'; advHtml += `<p class="small"><strong>Total: ₹${advList.reduce((s,x)=> s+(Number(x.amount)||0),0)}</strong></p>`; }
+  if(!advList.length) advHtml += '<p class="small">No advances for month</p>'; else { advHtml += '<table><thead><tr><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>'; advList.slice().reverse().forEach(a=> advHtml += `<tr><td>${a.date}</td><td style="text-align:right">₹${a.amount}</td><td class="left">${a.note||''}</td></tr>`); advHtml += '</tbody></table>'; advHtml += `<p class="small"><strong>Total: ₹${advList.reduce((s,x)=> s + (Number(x.amount)||0),0)}</strong></p>`; }
   $('labourAdvance').innerHTML = advHtml;
 
   const saved = await fetchSalary(currentLabour.id, month) || {};
@@ -840,58 +949,64 @@ auth.onAuthStateChanged(user => {
 /* ===== Utility functions ===== */
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
 function getDays(monthStr){ const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m); const arr=[]; for(let d=1; d<=n; d++) arr.push(d); return arr; }
-function getRateForLabour(id){ return 0; }
-
-/* Arrow-key navigation for shift input cells (up/down/left/right) */
-function enableCellArrowNavigation(){
-  const cells = Array.from(document.querySelectorAll('.attCell'));
-  // map by row and column
-  const rows = Array.from(document.querySelectorAll('#ownerTable tbody tr'));
-  cells.forEach(cell=>{
-    cell.addEventListener('keydown', (e)=>{
-      const td = e.target;
-      if(!td) return;
-      const day = td.dataset.day;
-      const id = td.dataset.id;
-      const row = td.closest('tr');
-      const rowIndex = rows.indexOf(row);
-      const colIndex = Array.from(row.querySelectorAll('.attCell')).indexOf(td);
-      if(e.key === 'ArrowUp'){
-        e.preventDefault();
-        if(rowIndex > 0){
-          const upRow = rows[rowIndex-1];
-          const target = upRow.querySelectorAll('.attCell')[colIndex];
-          if(target) target.focus();
-        }
-      } else if(e.key === 'ArrowDown'){
-        e.preventDefault();
-        if(rowIndex < rows.length-1){
-          const downRow = rows[rowIndex+1];
-          const target = downRow.querySelectorAll('.attCell')[colIndex];
-          if(target) target.focus();
-        }
-      } else if(e.key === 'ArrowLeft'){
-        e.preventDefault();
-        const prev = Array.from(row.querySelectorAll('.attCell'))[colIndex-1];
-        if(prev) prev.focus();
-      } else if(e.key === 'ArrowRight'){
-        e.preventDefault();
-        const next = Array.from(row.querySelectorAll('.attCell'))[colIndex+1];
-        if(next) next.focus();
-      }
-    });
-    // allow decimals (step set in input); ensure value not auto-selected on focus
-    cell.addEventListener('focus', (ev)=> { ev.target.select && ev.target.select(); });
-  });
+function getRateForLabour(id){ // attempt to read from currently rendered table or from list
+  const row = document.querySelector(`#salaryTable .sal-amt[data-id="${id}"]`);
+  if(row) return Number(row.value) || 0;
+  const labRow = Array.from(document.querySelectorAll('#labourList table tbody tr')).find(r => r.cells[1].textContent === id);
+  if(labRow) return Number(labRow.cells[3].textContent.replace('₹','').trim()) || 0;
+  return 0;
 }
 
-/* ===== On load initial rendering ===== */
+/* Arrow key navigation for attendance cells */
+function attCellKeyHandler(e){
+  const el = e.target;
+  const tr = el.closest('tr');
+  if(!tr) return;
+  const cells = Array.from(tr.querySelectorAll('.attCell'));
+  const idx = cells.indexOf(el);
+  if(e.key === 'ArrowRight'){ e.preventDefault(); if(idx < cells.length -1) cells[idx+1].focus(); }
+  else if(e.key === 'ArrowLeft'){ e.preventDefault(); if(idx > 0) cells[idx-1].focus(); }
+  else if(e.key === 'ArrowDown'){ e.preventDefault();
+    // move to same column in next row if exists
+    const rows = Array.from(document.querySelectorAll('#ownerTable tbody tr'));
+    const rIdx = rows.indexOf(tr);
+    if(rIdx < rows.length -1){
+      const next = rows[rIdx+1].querySelectorAll('.attCell')[idx];
+      if(next) next.focus();
+    }
+  }
+  else if(e.key === 'ArrowUp'){ e.preventDefault();
+    const rows = Array.from(document.querySelectorAll('#ownerTable tbody tr'));
+    const rIdx = rows.indexOf(tr);
+    if(rIdx > 0){
+      const prev = rows[rIdx-1].querySelectorAll('.attCell')[idx];
+      if(prev) prev.focus();
+    }
+  }
+}
+
+/* ===== On load initial rendering: fetch labours to show in lists where possible ===== */
 window.addEventListener('load', async ()=>{
   try{
     await renderLabourList();
     await populateAdvSelect();
   }catch(e){ console.warn('Init load: ', e.message); }
 });
+
+/* ===== Wire export buttons ===== */
+$('exportShiftCSV').onclick = exportShiftCSV;
+$('exportShiftXLS').onclick = exportShiftXLS;
+$('exportShiftPDF').onclick = exportShiftPDF;
+$('exportSalaryCSV').onclick = exportSalaryCSV;
+$('exportSalaryXLS').onclick = exportSalaryXLS;
+$('exportSalaryPDF').onclick = exportSalaryPDF;
+$('exportAdvCSV').onclick = exportAdvCSV;
+$('exportAdvXLS').onclick = exportAdvXLS;
+$('exportAdvPDF').onclick = exportAdvPDF;
+
+/* If you open file via file:// the Firebase auth may not work.
+   Serve via HTTP (http://localhost:8000/yourfile.html) for full functionality.
+*/
 
 </script>
 </body>
