@@ -174,17 +174,14 @@
   </div>
 </div>
 
-<!-- ============================
-     Firebase SDK (compat) + config
-     Paste this just before your main app JS block
-     ============================ -->
-<!-- Use the compat build so we can use firebase.firestore() & firebase.analytics() easily -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<!-- ===== Firebase SDK (modular) initialization - using your config ===== -->
+<script type="module">
+  // CDN modular imports (no local files) - works in modern browsers.
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
+  import { getAnalytics } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics.js';
+  import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
-<script>
-  // Your Firebase configuration (you provided this)
+  // ---------- PASTE YOUR FIREBASE CONFIG HERE ----------
   const firebaseConfig = {
     apiKey: "AIzaSyD4Ax31xHSiW4d4j-YgwcmvH1kPc4OrUoU",
     authDomain: "vfs-labour-portal-8ba3c.firebaseapp.com",
@@ -194,20 +191,23 @@
     appId: "1:212643125844:web:ff2757e75fd37203fc6bc1",
     measurementId: "G-1SF18YYT6P"
   };
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  // Analytics may not work on file://. It's OK; Firestore still initializes.
+  try { const analytics = getAnalytics(app); } catch(e){ /* ignore analytics errors when testing locally */ }
+  const db = getFirestore(app);
 
-  // Initialize Firebase (compat)
-  const firebaseApp = firebase.initializeApp(firebaseConfig);
-  const analytics = firebase.analytics();
-  const db = firebase.firestore(); // you can use `db` later to read/write Firestore
-  // (For now the portal still uses localStorage; db is ready for future integration)
   console.log('Firebase initialized, project:', firebaseConfig.projectId);
+  // NOTE: currently your app stores data locally (localStorage). When ready you can:
+  //  - write attendance/advances/salary data to Firestore using db
+  //  - ensure Firestore rules permit writes (test mode or authenticated)
+  // I kept your existing localStorage logic untouched below.
+  window._firebase = { app, db };
 </script>
 
-<!-- ============================
-     Main portal JS (original app logic)
-     ============================ -->
+<!-- ===== Your app script (kept intact) ===== -->
 <script>
-/* ===== Storage keys & seed ===== */
+// ===== Storage keys & seed =====
 const OWNER_PWD = 'vfs15254'; // demo password
 const KEY_LAB = 'labours_v4';
 const KEY_ATT = 'attendance_v4';
@@ -228,7 +228,7 @@ function seed(){
 }
 seed();
 
-/* ===== Storage helpers ===== */
+// Storage helpers
 function getLabours(){ return JSON.parse(localStorage.getItem(KEY_LAB) || '[]'); }
 function setLabours(a){ localStorage.setItem(KEY_LAB, JSON.stringify(a)); }
 function getAttendance(){ return JSON.parse(localStorage.getItem(KEY_ATT) || '{}'); }
@@ -238,24 +238,24 @@ function setAdvances(o){ localStorage.setItem(KEY_ADV, JSON.stringify(o)); }
 function getSalaries(){ return JSON.parse(localStorage.getItem(KEY_SAL) || '{}'); }
 function setSalaries(o){ localStorage.setItem(KEY_SAL, JSON.stringify(o)); }
 
-/* ===== simple DOM helper ===== */
+// DOM helper
 const $ = id => document.getElementById(id);
 
-/* ===== Navigation and basic UI ===== */
+// Navigation basic UI
 function hideAll(){ ['ownerLoginCard','labourLoginCard','ownerDashboard','labourDashboard','labourModal'].forEach(id=>$(id).classList.add('hidden')); $('homeCard').classList.add('hidden'); }
 $('ownerBtn').onclick = ()=>{ hideAll(); $('ownerLoginCard').classList.remove('hidden'); };
 $('labourBtn').onclick = ()=>{ hideAll(); $('labourLoginCard').classList.remove('hidden'); };
 $('ownerBack').onclick = ()=>location.reload();
 $('labourBack').onclick = ()=>location.reload();
 
-/* ===== Owner login ===== */
+// Owner login
 $('ownerLogin').onclick = ()=>{
   const v = $('ownerPwd').value.trim();
   if(v === OWNER_PWD){ hideAll(); $('ownerDashboard').classList.remove('hidden'); initOwnerView(); }
   else alert('Wrong password');
 };
 
-/* ===== Labour login ===== */
+// Labour login
 let currentLabour = null;
 $('labourLoginBtn').onclick = ()=>{
   const id = $('labUserId').value.trim(), pwd = $('labPwd').value.trim();
@@ -269,7 +269,7 @@ $('labourLoginBtn').onclick = ()=>{
 $('ownerLogout').onclick = ()=>location.reload();
 $('labourLogout').onclick = ()=>location.reload();
 
-/* ===== Initialize owner dashboard ===== */
+// Initialize owner dashboard
 function initOwnerView(){
   $('ownerMonth').value = (new Date()).toISOString().slice(0,7);
   $('advMonth').value = $('ownerMonth').value;
@@ -281,12 +281,9 @@ function initOwnerView(){
   renderSalarySheet();
 }
 
-/* ===== Attendance table (owner) ===== */
+// Attendance helpers
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
-function getDays(monthStr){
-  const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m);
-  const arr = []; for(let d=1; d<=n; d++) arr.push(d); return arr;
-}
+function getDays(monthStr){ const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m); const arr = []; for(let d=1; d<=n; d++) arr.push(d); return arr; }
 
 function generateOwnerTable(){
   const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; }
@@ -315,7 +312,7 @@ function updateRowTotals(){
   });
 }
 
-/* Save attendance */
+// Save attendance
 $('saveAll').onclick = ()=>{
   const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; }
   const att = getAttendance();
@@ -327,7 +324,7 @@ $('saveAll').onclick = ()=>{
   alert('Attendance saved locally');
 };
 
-/* Owner search */
+// Owner search
 function ownerFilter(){
   const q = $('ownerSearch').value.trim().toLowerCase();
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
@@ -336,18 +333,16 @@ function ownerFilter(){
   });
 }
 
-/* ===== Advances (owner) ===== */
+// Advances UI
 function populateAdvSelect(){ const sel = $('advLab'); sel.innerHTML = ''; getLabours().forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=l.id+' - '+l.name; sel.appendChild(o);} ); }
 $('showAdv').onclick = renderAdvances;
 
-/* Render advances: totals by labour (dates sorted when viewing) */
 function renderAdvances(){
   const month = $('advMonth').value || $('ownerMonth').value;
   const adv = getAdvances(); const labs = getLabours();
   const tbody = document.querySelector('#advTable tbody'); tbody.innerHTML = '';
   labs.forEach((l,i)=>{
     const listAll = (adv[l.id]||[]).slice();
-    // filter by month and sort by date ascending
     const list = listAll.filter(a=>a.date && a.date.startsWith(month)).sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
     const tot = list.reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const tr = document.createElement('tr');
@@ -357,7 +352,6 @@ function renderAdvances(){
   populateAdvSelect();
 }
 
-/* Save advance */
 $('saveAdv').onclick = ()=>{
   const lab = $('advLab').value; const date = $('advDate').value; const amt = Number($('advAmt').value) || 0; const note = $('advNote').value;
   if(!lab || !date || amt <= 0){ alert('Select labour, date and amount'); return; }
@@ -368,7 +362,6 @@ $('clearAdv').onclick = ()=>{ $('advDate').value=''; $('advAmt').value=''; $('ad
 
 function prefillAdv(id){ $('advLab').value = id; $('advDate').value = (new Date()).toISOString().slice(0,10); window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); }
 
-/* View advances for labour (opens new tab) — show chronological order (old → new) */
 function viewAdvances(id, month){
   const adv = getAdvances(); let list = (adv[id] || []).slice();
   if(month) list = list.filter(a=> a.date && a.date.startsWith(month));
@@ -385,7 +378,7 @@ function viewAdvances(id, month){
   const w = window.open('', '_blank'); w.document.write(html); w.document.close();
 }
 
-/* ===== Salary sheet (owner) ===== */
+// Salary sheet
 $('showSalary').onclick = renderSalarySheet;
 
 function renderSalarySheet(){
@@ -424,7 +417,6 @@ function renderSalarySheet(){
   document.querySelectorAll('#salaryTable input').forEach(inp => inp.addEventListener('input', salaryInputsChanged));
 }
 
-/* When salary inputs change, recalc TotalAmt and Paid (MonthlyAdvance stays readonly) */
 function salaryInputsChanged(e){
   const id = e.target.dataset.id; if(!id) return;
   const row = Array.from(document.querySelectorAll('#salaryTable tbody tr')).find(tr => tr.querySelector('.sal-amt')?.dataset.id === id);
@@ -444,11 +436,9 @@ function salaryInputsChanged(e){
   const deductions = Number((monthlyAdvance + mess + uf + pf + debit + jvc + other).toFixed(2));
   const calcPaid = Number((totalAmt - deductions).toFixed(2));
   const paidInput = row.querySelector('.sal-paid');
-  // update paid unless user is actively editing paid (we keep simple: always set calculated)
   paidInput.value = calcPaid;
 }
 
-/* Save salary sheet */
 $('saveSalary').onclick = ()=>{
   const month = $('salaryMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; }
   const sal = getSalaries();
@@ -474,7 +464,7 @@ $('saveSalary').onclick = ()=>{
   alert('Salary sheet saved for ' + month);
 };
 
-/* ===== Exports ===== */
+// Exports helpers (CSV/XLS/PDF)
 function collectShiftRows(month){
   const labs = getLabours(); const att = getAttendance(); const days = getDays(month);
   const rows = labs.map((l,i)=>{
@@ -484,6 +474,7 @@ function collectShiftRows(month){
   });
   return {rows, days};
 }
+function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 function exportShiftCSV(){ const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; } const data=collectShiftRows(month); const header=['S.No','User ID','Name', ...data.days.map(String), 'Total']; const csv=[header.join(',')].concat(data.rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, ...r.days, r.total].join(','))).join('\n'); downloadBlob(csv, `shifts_${month}.csv`, 'text/csv'); }
 function exportShiftXLS(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=collectShiftRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; data.rows.forEach(r=>{ html+='<tr>'; html+=`<td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td>` + r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`;}); html+='</table>'; downloadBlob('\uFEFF'+html, `shifts_${month}.xls`, 'application/vnd.ms-excel'); }
 function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=collectShiftRows(month); let html=`<html><head><meta charset="utf-8"><title>Shift sheet ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Shift sheet — ${month}</h2><table><thead><tr>`+ ['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+`</tr></thead><tbody>`; data.rows.forEach(r=>{ html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td>`+ r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`; }); html+='</tbody></table><p style="color:#666">Generated by Shift Portal</p></body></html>'; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
@@ -506,9 +497,14 @@ function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth'
 function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
 function exportSalaryPDF(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=collectSalaryRows(month); let html=`<html><head><meta charset="utf-8"><title>Salary ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}</style></head><body><h2>Salary sheet — ${month}</h2><table><thead><tr>`; ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].forEach(h=> html += `<th>${h}</th>`); html += `</tr></thead><tbody>`; rows.forEach(r=> html += `<tr><td>${r.sno}</td><td>${r.id}</td><td style="text-align:left;padding-left:6px">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += `</tbody></table><p style="color:#666">Generated by Salary Portal</p></body></html>`; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
-function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+$('exportShiftCSV').onclick = exportShiftCSV;
+$('exportShiftXLS').onclick = exportShiftXLS;
+$('exportShiftPDF').onclick = exportShiftPDF;
+$('exportSalaryCSV').onclick = exportSalaryCSV;
+$('exportSalaryXLS').onclick = exportSalaryXLS;
+$('exportSalaryPDF').onclick = exportSalaryPDF;
 
-/* ===== Labour management ===== */
+// Labour management
 function renderLabourList(){ const labs=getLabours(); let html='<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Actions</th></tr></thead><tbody>'; labs.forEach((l,i)=> html += `<tr><td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`); html += '</tbody></table>'; $('labourList').innerHTML = html; }
 $('addLabour').onclick = ()=> openLabourModal();
 
@@ -552,7 +548,7 @@ $('saveLabourBtn').onclick = ()=>{
 
 function deleteLabour(id){ if(!confirm('Delete labour and all data?')) return; let labs=getLabours(); labs = labs.filter(x=>x.id !== id); setLabours(labs); const att=getAttendance(); Object.keys(att).forEach(k=>{ if(k.startsWith(id + '_')) delete att[k]; }); setAttendance(att); const adv=getAdvances(); delete adv[id]; setAdvances(adv); const sal=getSalaries(); delete sal[id]; setSalaries(sal); renderLabourList(); generateOwnerTable(); renderSalarySheet(); renderAdvances(); }
 
-/* ===== Labour portal view ===== */
+// Labour portal view
 function renderLabourInfo(){ if(!currentLabour) return; $('labourInfo').innerHTML = `<p><strong>${currentLabour.name}</strong> (ID: ${currentLabour.id})</p>`; }
 function renderLabourView(){
   if(!currentLabour) return; const month = $('labourMonth').value; if(!month) return;
@@ -595,18 +591,10 @@ function renderLabourView(){
   $('labourSalary').innerHTML = salaryHtml;
 }
 
-/* ===== Backup export ===== */
+// Backup export
 $('exportBackup').onclick = ()=>{ const payload = {labours: getLabours(), attendance: getAttendance(), advances: getAdvances(), salaries: getSalaries()}; downloadBlob(JSON.stringify(payload,null,2),'portal_backup.json','application/json'); };
 
-/* ===== Wire export buttons ===== */
-$('exportShiftCSV').onclick = exportShiftCSV;
-$('exportShiftXLS').onclick = exportShiftXLS;
-$('exportShiftPDF').onclick = exportShiftPDF;
-$('exportSalaryCSV').onclick = exportSalaryCSV;
-$('exportSalaryXLS').onclick = exportSalaryXLS;
-$('exportSalaryPDF').onclick = exportSalaryPDF;
-
-/* ===== Onload initial rendering ===== */
+// initial render
 window.addEventListener('load', ()=>{ renderLabourList(); populateAdvSelect(); });
 </script>
 </body>
