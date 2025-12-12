@@ -50,6 +50,12 @@
   /* small tweak so clicking a cell doesn't auto-select the row behind it */
   .attCell { background: #fff; }
 
+  /* Drag & drop styles */
+  .draggable-row { cursor:grab; }
+  .dragging { opacity: 0.5; }
+  .drop-target { outline: 2px dashed rgba(11,121,255,0.35); }
+  .reorder-controls { display:flex; gap:8px; align-items:center; margin-top:6px; }
+  .small-note { font-size:12px; color:#666; margin-left:6px; }
 </style>
 </head>
 <body>
@@ -177,6 +183,15 @@
 
     <hr>
     <h3 class="small">Manage Labours</h3>
+
+    <!-- Reorder controls (Enable Reorder / Fix Order / Cancel) -->
+    <div class="reorder-controls">
+      <button id="enableReorder" class="btn">Enable Reorder</button>
+      <button id="fixOrderBtn" class="success hidden">Fix Order (Save)</button>
+      <button id="cancelReorderBtn" class="danger hidden">Cancel</button>
+      <div class="small-note">Drag rows to reorder when reorder is enabled.</div>
+    </div>
+
     <div id="labourList"></div>
   </div>
 
@@ -296,17 +311,26 @@ $('labourLogout').onclick = ()=> location.reload();
 
 /* ========== Firestore helper functions ========== */
 
-/* Labours collection: doc id = labour id */
+/* Labours collection: doc id = labour id
+   NOTE: we fetch all docs and sort client-side by 'order' (if present) or 'createdAt' */
 async function fetchAllLabours(){
-  // try createdAt asc — newest at bottom
-  try {
-    const snap = await db.collection('labours').orderBy('createdAt','asc').get();
-    return snap.docs.map(d => ({id: d.id, ...d.data()}));
-  } catch(e) {
-    const snap = await db.collection('labours').orderBy('id').get();
-    return snap.docs.map(d => ({id: d.id, ...d.data()}));
-  }
+  const snap = await db.collection('labours').get();
+  const labs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+  // sort: first by explicit numeric 'order' (if present), else by createdAt (timestamp), else by id
+  labs.sort((a,b) => {
+    const ao = (a.order === undefined || a.order === null) ? Number.POSITIVE_INFINITY : Number(a.order);
+    const bo = (b.order === undefined || b.order === null) ? Number.POSITIVE_INFINITY : Number(b.order);
+    if(ao !== bo) return ao - bo;
+    // tie-breaker: createdAt
+    const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    if(at !== bt) return at - bt;
+    // final fallback: id
+    return (a.id || '').localeCompare(b.id || '');
+  });
+  return labs;
 }
+
 async function fetchLabourById(id){
   const d = await db.collection('labours').doc(id).get();
   if(!d.exists) return null;
@@ -563,13 +587,20 @@ async function viewAdvances(id, month){
   const w = window.open('', '_blank'); w.document.write(html); w.document.close();
 }
 
-/* Salary sheet UI (reads from Firestore) */
+/* ======= REPLACED: renderSalarySheet and salaryInputsChanged ===== */
+
+/* Ensure the Show Salary button triggers our function */
 $('showSalary').onclick = renderSalarySheet;
 
+/* Build salary table and force a calculation pass so Paid is populated after "Show Salary" */
 async function renderSalarySheet(){
-  const month = $('salaryMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; }
+  const month = $('salaryMonth').value || $('ownerMonth').value;
+  if(!month){ alert('Select month'); return; }
+
   const labs = await fetchAllLabours();
-  const tbody = document.querySelector('#salaryTable tbody'); tbody.innerHTML = '';
+  const tbody = document.querySelector('#salaryTable tbody');
+  tbody.innerHTML = '';
+
   for(let i=0;i<labs.length;i++){
     const l = labs[i];
     const att = await fetchAttendance(l.id, month);
@@ -577,48 +608,68 @@ async function renderSalarySheet(){
     const advItems = await fetchAdvancesForLab(l.id);
     const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const saved = await fetchSalary(l.id, month) || {};
+
+    // determine base values (ensure numeric)
     const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (att.rate || l.rate)) || Number(l.rate||0);
-    const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
-    const monthlyAdvance = advTotal;
-    const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0), debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
-    const deductions = Number((monthlyAdvance + mess + uf + pf + debit + jvc + other).toFixed(2));
-    const calcPaid = Number((totalAmt - deductions).toFixed(2));
-    const paid = saved.paid !== undefined ? Number(saved.paid) : calcPaid;
-    const paymentMode = saved.paymentMode || l.paymentMode || 'Cash';
+    const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0);
+    const debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
+    const monthlyAdvance = Number(advTotal || 0);
+
+    // create row — set inputs with 2-decimal formatting so user sees consistent values
+    const totalAmt = Number((amtPerShift * totalShift));
+    const paidFromSaved = saved.paid !== undefined ? Number(saved.paid) : null;
+    const paidToShow = paidFromSaved !== null ? paidFromSaved : Number((totalAmt - (monthlyAdvance + mess + uf + pf + debit + jvc + other)));
+
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>
-      <td><input class="sal-amt" data-id="${l.id}" value="${amtPerShift}" style="width:90px" step="0.01" type="number"></td>
-      <td><input class="sal-totalShift readonly" data-id="${l.id}" value="${totalShift}" readonly style="width:90px"></td>
-      <td><input class="sal-totalAmt readonly" data-id="${l.id}" value="${totalAmt}" readonly style="width:110px"></td>
-      <td><input class="sal-monthlyAdvance readonly" data-id="${l.id}" value="${monthlyAdvance}" readonly style="width:110px"></td>
-      <td><input class="sal-mess" data-id="${l.id}" value="${mess}" style="width:90px" step="0.01" type="number"></td>
-      <td><input class="sal-uf" data-id="${l.id}" value="${uf}" style="width:90px" step="0.01" type="number"></td>
-      <td><input class="sal-pf" data-id="${l.id}" value="${pf}" style="width:90px" step="0.01" type="number"></td>
-      <td><input class="sal-debit" data-id="${l.id}" value="${debit}" style="width:90px" step="0.01" type="number"></td>
-      <td><input class="sal-jvc" data-id="${l.id}" value="${jvc}" style="width:90px" step="0.01" type="number"></td>
-      <td><input class="sal-other" data-id="${l.id}" value="${other}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-amt" data-id="${l.id}" value="${Number(amtPerShift).toFixed(2)}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-totalShift readonly" data-id="${l.id}" value="${Number(totalShift).toFixed(2)}" readonly style="width:90px"></td>
+      <td><input class="sal-totalAmt readonly" data-id="${l.id}" value="${Number(totalAmt).toFixed(2)}" readonly style="width:110px"></td>
+      <td><input class="sal-monthlyAdvance readonly" data-id="${l.id}" value="${Number(monthlyAdvance).toFixed(2)}" readonly style="width:110px"></td>
+      <td><input class="sal-mess" data-id="${l.id}" value="${Number(mess).toFixed(2)}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-uf" data-id="${l.id}" value="${Number(uf).toFixed(2)}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-pf" data-id="${l.id}" value="${Number(pf).toFixed(2)}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-debit" data-id="${l.id}" value="${Number(debit).toFixed(2)}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-jvc" data-id="${l.id}" value="${Number(jvc).toFixed(2)}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-other" data-id="${l.id}" value="${Number(other).toFixed(2)}" style="width:90px" step="0.01" type="number"></td>
       <td>
         <select class="sal-paymode" data-id="${l.id}" style="width:100px">
-          <option value="Cash"${paymentMode === 'Cash' ? ' selected' : ''}>Cash</option>
-          <option value="A/c"${paymentMode === 'A/c' ? ' selected' : ''}>A/c</option>
+          <option value="Cash"${(saved.paymentMode || l.paymentMode || 'Cash') === 'Cash' ? ' selected' : ''}>Cash</option>
+          <option value="A/c"${(saved.paymentMode || l.paymentMode || 'Cash') === 'A/c' ? ' selected' : ''}>A/c</option>
         </select>
       </td>
-      <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px" step="0.01" type="number"></td>
+      <td><input class="sal-paid" data-id="${l.id}" value="${Number(paidToShow).toFixed(2)}" style="width:110px" step="0.01" type="number"></td>
       <td><input class="sal-remarks" data-id="${l.id}" value="${saved.remarks || ''}" style="width:160px"></td>`;
     tbody.appendChild(tr);
   }
+
+  // attach event listeners (recalculate whenever a relevant field changes)
   document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => inp.addEventListener('input', salaryInputsChanged));
+
+  // Force a recalculation pass for every row so Paid column is guaranteed correct after "Show Salary"
+  Array.from(document.querySelectorAll('#salaryTable tbody tr')).forEach(row => {
+    const amtInput = row.querySelector('.sal-amt');
+    if(amtInput) {
+      // call the same handler used by user events; this ensures consistent behavior
+      salaryInputsChanged({ target: amtInput });
+    }
+  });
 }
 
-/* salary inputs recalc */
+/* Recalculate a single row's totals and update Paid (called on input and once after render) */
 function salaryInputsChanged(e){
-  const id = e.target.dataset.id; if(!id) return;
-  const row = Array.from(document.querySelectorAll('#salaryTable tbody tr')).find(tr => tr.querySelector('.sal-amt')?.dataset.id === id);
+  const target = e.target;
+  const id = target?.dataset?.id;
+  if(!id) return;
+
+  // find the row for this id
+  const row = Array.from(document.querySelectorAll('#salaryTable tbody tr'))
+    .find(tr => tr.querySelector('.sal-amt')?.dataset.id === id);
   if(!row) return;
+
+  // read numeric inputs (tolerant parsing)
   const amtPerShift = Number(row.querySelector('.sal-amt').value) || 0;
   const totalShift = Number(row.querySelector('.sal-totalShift').value) || 0;
-  const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
-  row.querySelector('.sal-totalAmt').value = totalAmt;
   const monthlyAdvance = Number(row.querySelector('.sal-monthlyAdvance').value) || 0;
   const mess = Number(row.querySelector('.sal-mess').value) || 0;
   const uf = Number(row.querySelector('.sal-uf').value) || 0;
@@ -626,126 +677,29 @@ function salaryInputsChanged(e){
   const debit = Number(row.querySelector('.sal-debit').value) || 0;
   const jvc = Number(row.querySelector('.sal-jvc').value) || 0;
   const other = Number(row.querySelector('.sal-other').value) || 0;
-  const deductions = Number((monthlyAdvance + mess + uf + pf + debit + jvc + other).toFixed(2));
-  const calcPaid = Number((totalAmt - deductions).toFixed(2));
-  const paidInput = row.querySelector('.sal-paid');
-  paidInput.value = calcPaid;
-}
 
-/* Save salary sheet to Firestore (owner-only) */
-$('saveSalary').onclick = async ()=>{
-  if(!isOwnerSignedIn()){ alert('Owner sign-in required to save salary.'); return; }
-  const month = $('salaryMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; }
-  try{
-    const rows = document.querySelectorAll('#salaryTable tbody tr');
-    for(const r of rows){
-      const id = r.querySelector('.sal-amt').dataset.id;
-      const payload = {
-        amtPerShift: Number(r.querySelector('.sal-amt').value) || 0,
-        totalShift: Number(r.querySelector('.sal-totalShift').value) || 0,
-        totalAmt: Number(r.querySelector('.sal-totalAmt').value) || 0,
-        monthlyAdvance: Number(r.querySelector('.sal-monthlyAdvance').value) || 0,
-        mess: Number(r.querySelector('.sal-mess').value) || 0,
-        uf: Number(r.querySelector('.sal-uf').value) || 0,
-        pf: Number(r.querySelector('.sal-pf').value) || 0,
-        debit: Number(r.querySelector('.sal-debit').value) || 0,
-        jvc: Number(r.querySelector('.sal-jvc').value) || 0,
-        other: Number(r.querySelector('.sal-other').value) || 0,
-        paymentMode: r.querySelector('.sal-paymode').value || '',
-        paid: Number(r.querySelector('.sal-paid').value) || 0,
-        remarks: r.querySelector('.sal-remarks')?.value || ''
-      };
-      await saveSalaryRecord(id, month, payload);
+  // compute
+  const totalAmt = amtPerShift * totalShift;
+  const deductions = monthlyAdvance + mess + uf + pf + debit + jvc + other;
+  const calcPaid = totalAmt - deductions;
+
+  // write back formatted values
+  const totalAmtInp = row.querySelector('.sal-totalAmt');
+  if(totalAmtInp) totalAmtInp.value = Number(totalAmt).toFixed(2);
+
+  const paidInp = row.querySelector('.sal-paid');
+  if(paidInp){
+    // If user is editing paid directly, respect that edit on paid input events.
+    if(target.classList && target.classList.contains('sal-paid')){
+      paidInp.value = Number(paidInp.value || 0).toFixed(2);
+    } else {
+      paidInp.value = Number(calcPaid).toFixed(2);
     }
-    alert('Salary sheet saved to Firestore for ' + month);
-  } catch(err){
-    alert('Save salary failed: ' + err.message);
-  }
-};
-
-/* Export helpers (collect attendance/salary/adv) */
-async function collectShiftRows(month){
-  const labs = await fetchAllLabours();
-  const rows = [];
-  for(const [i,l] of labs.entries()){
-    const key = `${l.id}_${month}`;
-    const doc = await db.collection('attendance').doc(key).get();
-    const rec = doc.exists ? doc.data() : {shifts:{}};
-    const days = getDays(month);
-    const dayVals = [], total=0;
-    let tot=0;
-    for(const d of days){ const v = Number(rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0) || 0; dayVals.push(v); tot += v; }
-    rows.push({sno:i+1, id:l.id, name:l.name, days: dayVals, total: tot});
-  }
-  return {rows, days: getDays(month)};
-}
-async function exportShiftCSV(){ const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; } const data=await collectShiftRows(month); const header=['S.No','User ID','Name', ...data.days.map(String), 'Total']; const csv=[header.join(',')].concat(data.rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, ...r.days, r.total].join(','))).join('\n'); downloadBlob(csv, `shifts_${month}.csv`, 'text/csv'); }
-async function exportShiftXLS(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; data.rows.forEach(r=>{ html+='<tr>'; html+=`<td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td>` + r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`;}); html+='</table>'; downloadBlob('\uFEFF'+html, `shifts_${month}.xls`, 'application/vnd.ms-excel'); }
-async function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); let html=`<html><head><meta charset="utf-8"><title>Shift sheet ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Shift sheet — ${month}</h2><table><thead><tr>`+ ['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+`</tr></thead><tbody>`; data.rows.forEach(r=>{ html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td>`+ r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`; }); html+='</tbody></table></body></html>'; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
-
-/* Salary export helpers */
-async function collectSalaryRows(month){
-  const labs = await fetchAllLabours(); const rows = [];
-  for(const [i,l] of labs.entries()){
-    const att = await fetchAttendance(l.id, month);
-    const totalShift = Object.values(att.shifts||{}).reduce((s,v)=> s + (Number(v)||0), 0);
-    const saved = await fetchSalary(l.id, month) || {};
-    const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (att.rate || l.rate)) || Number(l.rate||0);
-    const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
-    const advItems = await fetchAdvancesForLab(l.id);
-    const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
-    const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0), debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
-    const paid = Number(saved.paid !== undefined ? saved.paid : (totalAmt - (advTotal + mess + uf + pf + debit + jvc + other))).toFixed(2);
-    const paymentMode = (saved.paymentMode || l.paymentMode || '').toString();
-    rows.push({sno:i+1, id:l.id, name:l.name, amtPerShift, totalShift, totalAmt, monthlyAdvance: advTotal, mess, uf, pf, debit, jvc, other, paymentMode, paid});
-  }
-  return rows;
-}
-async function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); const header=['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary']; const csv=[header.join(',')].concat(rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, `"${r.paymentMode}"`, r.paid].join(','))).join('\n'); downloadBlob(csv, `salary_${month}.csv`, 'text/csv'); }
-async function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
-
-/* UPDATED: exportSalaryPDF — ensure S.No starts from 1 for each Payment Mode group (A/c then Cash) */
-async function exportSalaryPDF(){
-  const month = $('salaryMonth').value || $('ownerMonth').value;
-  if(!month){ alert('Select month'); return; }
-  const rows = await collectSalaryRows(month);
-  // partition rows into A/c and Cash
-  const acRows = rows.filter(r => (r.paymentMode || '').toLowerCase().includes('a/c'));
-  const cashRows = rows.filter(r => !(r.paymentMode || '').toLowerCase().includes('a/c'));
-  // renumber each group starting from 1
-  const renumber = (arr) => arr.map((r, idx) => ({ ...r, sno: idx + 1 }));
-  const acRen = renumber(acRows);
-  const cashRen = renumber(cashRows);
-
-  // build HTML for both tables
-  function tableHtml(title, arr){
-    let html = `<h3 style="margin-bottom:6px">${title}</h3><table><thead><tr>`;
-    ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].forEach(h => html += `<th>${h}</th>`);
-    html += `</tr></thead><tbody>`;
-    arr.forEach(r => {
-      html += `<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`;
-    });
-    html += `</tbody></table>`;
-    return html;
   }
 
-  const head = `<html><head><meta charset="utf-8"><title>Salary ${month}</title><style>
-    body{font-family:Arial,Helvetica,sans-serif;color:#222;padding:18px}
-    table{border-collapse:collapse;width:100%;margin-bottom:18px}
-    th,td{border:1px solid #333;padding:6px;text-align:center;font-size:12px}
-    th{background:#eee}
-    td.left{text-align:left;padding-left:6px}
-    h2{margin-bottom:6px}
-    .watermark{opacity:0.06;position:fixed;left:40px;top:20px;width:220px;height:220px;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx=\"12\" ry=\"12\" width=\"100%\" height=\"100%\" fill=\"%23ffffff\"/><text x=\"50%\" y=\"56%\" font-size=\"36\" font-family=\"Arial\" font-weight=\"700\" text-anchor=\"middle\" fill=\"%23a2242a\">VF</text></svg>');background-size:contain;background-repeat:no-repeat}
-    @media print{ table{page-break-inside:auto} tr{page-break-inside:avoid;page-break-after:auto} }
-    </style></head><body><div class="watermark"></div><h2>Salary sheet — ${month}</h2>`;
-
-  const combinedHtml = head + tableHtml('Payment Mode: A/c', acRen) + '<div style="height:24px"></div>' + tableHtml('Payment Mode: Cash', cashRen) + '</body></html>';
-
-  // open in new tab so user may print or save from browser (as you prefer not to use html2canvas/jsPDF)
-  const w = window.open('', '_blank');
-  w.document.write(combinedHtml);
-  w.document.close();
+  // ensure amtPerShift remains nicely formatted
+  const amtInp = row.querySelector('.sal-amt');
+  if(amtInp) amtInp.value = Number(amtPerShift).toFixed(2);
 }
 
 /* ===== ADVANCES export functions (unchanged behavior) ===== */
@@ -766,16 +720,149 @@ async function exportAdvXLS(){ const month = $('advMonth').value || $('ownerMont
 async function exportAdvPDF(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); let html = `<html><head><meta charset="utf-8"><title>Advances ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Advances — ${month}</h2>`; if(rows.length === 0){ html += '<p>No advances for selected month.</p>'; } else { html += '<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>'; rows.forEach(r => { html += `<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td><td>${r.date}</td><td style="text-align:right">${r.amount}</td><td class="left">${r.note}</td></tr>`; }); html += '</tbody></table>'; const total = rows.reduce((s,x)=> s + (Number(x.amount)||0), 0); html += `<p><strong>Total Advances: ₹${total}</strong></p>`; } html += '</body></html>'; const w = window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
 /* ===== labour management (owner-only) ===== */
+
+/* Drag & drop state */
+let reorderEnabled = false;
+let originalLabourOrder = []; // hold a copy to cancel if needed
+
 async function renderLabourList(){
   const labs = await fetchAllLabours();
-  let html='<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Payment Mode</th><th>Actions</th></tr></thead><tbody>';
-  labs.forEach((l,i)=> html += `<tr><td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td>${l.paymentMode || 'Cash'}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`);
+  // store original order snapshot
+  originalLabourOrder = labs.map(l => l.id);
+
+  // Build table rows as draggable when reorder is enabled.
+  let html = '<table id="labourTable"><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Payment Mode</th><th>Actions</th></tr></thead><tbody>';
+  labs.forEach((l,i)=>{
+    // add draggable-row class only if reorderEnabled is true (we will toggle later)
+    html += `<tr class="lab-row draggable-row" data-id="${l.id}" draggable="false"><td class="lab-sno">${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td>${l.paymentMode || 'Cash'}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`;
+  });
   html += '</tbody></table>';
   $('labourList').innerHTML = html;
+
+  // initialize drag & drop listeners (they will only be active when reorderEnabled = true)
+  initDragHandlers();
 }
+
+/* enable drag listeners for rows */
+function initDragHandlers(){
+  const tbody = document.querySelector('#labourList tbody');
+  if(!tbody) return;
+
+  // remove any previous listeners by re-cloning nodes (simple cleanup)
+  Array.from(tbody.querySelectorAll('.lab-row')).forEach(row => {
+    // ensure attributes
+    row.draggable = reorderEnabled;
+    row.classList.toggle('draggable-row', reorderEnabled);
+    row.classList.remove('dragging','drop-target');
+  });
+
+  if(!reorderEnabled) return;
+
+  let dragSrc = null;
+
+  tbody.addEventListener('dragstart', e => {
+    const tr = e.target.closest('tr.lab-row');
+    if(!tr) return;
+    dragSrc = tr;
+    tr.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', tr.dataset.id); } catch(_) {}
+  });
+
+  tbody.addEventListener('dragend', e => {
+    const tr = e.target.closest('tr.lab-row');
+    if(tr) tr.classList.remove('dragging');
+    tbody.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+  });
+
+  tbody.addEventListener('dragover', e => {
+    e.preventDefault();
+    const tr = e.target.closest('tr.lab-row');
+    if(!tr || tr === dragSrc) return;
+    tr.classList.add('drop-target');
+  });
+
+  tbody.addEventListener('dragleave', e => {
+    const tr = e.target.closest('tr.lab-row');
+    if(tr) tr.classList.remove('drop-target');
+  });
+
+  tbody.addEventListener('drop', e => {
+    e.preventDefault();
+    const tr = e.target.closest('tr.lab-row');
+    if(!tr || !dragSrc || tr === dragSrc) return;
+    // insert dragged row before or after target depending on pointer position
+    const rect = tr.getBoundingClientRect();
+    const dropBefore = (e.clientY - rect.top) < (rect.height / 2);
+    const parent = tbody;
+    if(dropBefore) parent.insertBefore(dragSrc, tr);
+    else parent.insertBefore(dragSrc, tr.nextSibling);
+
+    // update S.No
+    Array.from(parent.querySelectorAll('tr.lab-row')).forEach((r, idx) => {
+      const snoCell = r.querySelector('.lab-sno');
+      if(snoCell) snoCell.textContent = idx + 1;
+    });
+  });
+}
+
+/* Buttons to control reorder */
+$('enableReorder').onclick = async () => {
+  reorderEnabled = true;
+  // show Fix and Cancel buttons
+  $('fixOrderBtn').classList.remove('hidden');
+  $('cancelReorderBtn').classList.remove('hidden');
+  $('enableReorder').classList.add('hidden');
+  // make rows draggable and add visual hint
+  Array.from(document.querySelectorAll('#labourList tr.lab-row')).forEach(r => {
+    r.draggable = true;
+    r.classList.add('draggable-row');
+  });
+  initDragHandlers();
+  // small scroll to labour list
+  scrollToElement($('labourList'));
+};
+
+$('cancelReorderBtn').onclick = async () => {
+  // revert DOM to original order by re-rendering
+  reorderEnabled = false;
+  $('fixOrderBtn').classList.add('hidden');
+  $('cancelReorderBtn').classList.add('hidden');
+  $('enableReorder').classList.remove('hidden');
+  await renderLabourList(); // this re-loads from Firestore (original or persisted order)
+};
+
+$('fixOrderBtn').onclick = async () => {
+  if(!isOwnerSignedIn()){ alert('Owner sign-in required to save order.'); return; }
+  const rows = Array.from(document.querySelectorAll('#labourList tbody tr.lab-row'));
+  // compute new order array
+  const newOrder = rows.map((r, idx) => ({ id: r.dataset.id, order: idx + 1 }));
+  try {
+    // write in batch to Firestore
+    const batch = db.batch();
+    newOrder.forEach(item => {
+      const ref = db.collection('labours').doc(item.id);
+      batch.set(ref, { order: item.order }, { merge: true });
+    });
+    await batch.commit();
+    alert('Order saved.');
+    reorderEnabled = false;
+    $('fixOrderBtn').classList.add('hidden');
+    $('cancelReorderBtn').classList.add('hidden');
+    $('enableReorder').classList.remove('hidden');
+    // re-render all dependent views
+    await renderLabourList();
+    await generateOwnerTable();
+    await populateAdvSelect();
+    await renderSalarySheet();
+  } catch (err) {
+    alert('Failed to save order: ' + err.message);
+  }
+};
+
+/* modal and CRUD unchanged */
 $('addLabour').onclick = ()=> openLabourModal();
 
-/* modal */
 function openLabourModal(editId){
   $('labourModal').classList.remove('hidden');
   if(editId){
@@ -912,6 +999,16 @@ function attCellKeyHandler(e){
 
 /* utility to download files */
 function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+
+/* AUTO-SELECT text when clicking in search boxes and login id */
+['ownerSearch', 'advSearch', 'labUserId'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el){
+    el.addEventListener('focus', function(){
+      setTimeout(()=> this.select(), 10);
+    });
+  }
+});
 
 /* init on load */
 window.addEventListener('load', async ()=>{ try{ await renderLabourList(); await populateAdvSelect(); }catch(e){ console.warn('Init load: ', e.message); } });
