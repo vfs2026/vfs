@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Labour Shift, Advance & Salary Portal</title>
+<title>Labour Shift, Advance & Salary Portal (Firestore)</title>
 <style>
   :root{--sticky-id:100px;--sticky-name:260px}
   body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;color:#222}
@@ -36,13 +36,13 @@
 <body>
 <div class="wrap">
   <div class="card" id="homeCard">
-    <h1>Labour Shift, Advance & Salary Portal</h1>
+    <h1>Labour Shift, Advance & Salary Portal (Firestore)</h1>
     <div class="row">
       <button class="btn" id="ownerBtn">Owner Login</button>
       <button class="btn-muted" id="labourBtn">Labour Login</button>
       <div style="flex:1"></div>
     </div>
-    <p class="small muted">Demo owner password (if you want to test): <strong>use Firebase Auth user you create</strong></p>
+    <p class="small muted">Owner must sign in to perform saves (Firestore writes).</p>
   </div>
 
   <!-- Owner Login (email/password using Firebase Auth) -->
@@ -68,7 +68,7 @@
       <button class="btn" id="labourLoginBtn">Login</button>
       <button id="labourBack">Back</button>
     </div>
-    <p class="small muted">Labour login now requires only User ID — no password shown to labour.</p>
+    <p class="small muted">Labour login requires only User ID — no password shown to labour.</p>
   </div>
 
   <!-- Owner Dashboard -->
@@ -83,11 +83,11 @@
       <input type="month" id="ownerMonth">
       <button class="btn" id="loadTable">Load Table</button>
       <button id="addLabour">Add Labour</button>
-      <button id="exportBackup">Export Backup</button>
+      <button id="exportBackup">Export Backup (local snapshot)</button>
       <div style="flex:1"></div>
       <label>Search</label>
       <input id="ownerSearch" class="search" placeholder="ID or name" oninput="ownerFilter()">
-      <button class="success" id="saveAll">Save All</button>
+      <button class="success" id="saveAll">Save All (to Firestore)</button>
       <button id="exportShiftCSV">Export Shifts CSV</button>
       <button id="exportShiftXLS">Export Shifts XLS</button>
       <button id="exportShiftPDF">Export Shifts PDF</button>
@@ -175,15 +175,14 @@
   </div>
 </div>
 
-<!-- Firebase compat SDK (simple drop-in for browser) -->
+<!-- Firebase compat SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
 <script>
 /* ---------------------------
-  Replace below firebaseConfig with your project config.
-  You provided this config earlier — it's included here.
+  Put your firebase config here (you gave this earlier)
 ---------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyD4Ax31xHSiW4d4j-YgwcmvH1kPc4OrUoU",
@@ -196,115 +195,190 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
-const firestore = firebase.firestore();
+const db = firebase.firestore();
 
-/* Owner UID used in your Firestore rules (you gave this earlier) */
-const OWNER_UID = 'D0iiwtC6w9O9qImWLQUXDxKP7lc2';
+/* OWNER UID — set to the UID you created in Firebase Auth */
+const OWNER_UID = 'D0iiwtC6w9O9qImWLQUXDxKP7lc2'; // <-- replace with your owner UID if different
 
-/* ===== Storage keys & seed (localStorage) ===== */
-const KEY_LAB = 'labours_v4';
-const KEY_ATT = 'attendance_v4';
-const KEY_ADV = 'advances_v4';
-const KEY_SAL = 'salary_v4';
-
-function seed(){
-  if(!localStorage.getItem(KEY_LAB)){
-    const sample = [
-      {id:'L001', name:'Ramu', password:'1234', rate:500},
-      {id:'L002', name:'Selvi', password:'1234', rate:450}
-    ];
-    localStorage.setItem(KEY_LAB, JSON.stringify(sample));
-  }
-  if(!localStorage.getItem(KEY_ATT)) localStorage.setItem(KEY_ATT, JSON.stringify({}));
-  if(!localStorage.getItem(KEY_ADV)) localStorage.setItem(KEY_ADV, JSON.stringify({}));
-  if(!localStorage.getItem(KEY_SAL)) localStorage.setItem(KEY_SAL, JSON.stringify({}));
-}
-seed();
-
-/* ===== Storage helpers ===== */
-function getLabours(){ return JSON.parse(localStorage.getItem(KEY_LAB) || '[]'); }
-function setLabours(a){ localStorage.setItem(KEY_LAB, JSON.stringify(a)); }
-function getAttendance(){ return JSON.parse(localStorage.getItem(KEY_ATT) || '{}'); }
-function setAttendance(o){ localStorage.setItem(KEY_ATT, JSON.stringify(o)); }
-function getAdvances(){ return JSON.parse(localStorage.getItem(KEY_ADV) || '{}'); }
-function setAdvances(o){ localStorage.setItem(KEY_ADV, JSON.stringify(o)); }
-function getSalaries(){ return JSON.parse(localStorage.getItem(KEY_SAL) || '{}'); }
-function setSalaries(o){ localStorage.setItem(KEY_SAL, JSON.stringify(o)); }
-
-/* ===== simple DOM helper ===== */
+/* ===== Simple DOM helper ===== */
 const $ = id => document.getElementById(id);
 
-/* ===== Navigation and basic UI ===== */
+/* ===== Navigation UI wiring ===== */
 function hideAll(){ ['ownerLoginCard','labourLoginCard','ownerDashboard','labourDashboard','labourModal'].forEach(id=>$(id).classList.add('hidden')); $('homeCard').classList.add('hidden'); }
 $('ownerBtn').onclick = ()=>{ hideAll(); $('ownerLoginCard').classList.remove('hidden'); };
 $('labourBtn').onclick = ()=>{ hideAll(); $('labourLoginCard').classList.remove('hidden'); };
 $('ownerBack').onclick = ()=>location.reload();
 $('labourBack').onclick = ()=>location.reload();
 
-/* ===== Owner login (Firebase Auth email/password) ===== */
-$('ownerLogin').onclick = ()=>{
+/* ===== Auth (owner sign-in) ===== */
+$('ownerLogin').onclick = async ()=>{
   const email = $('ownerEmail').value.trim();
   const pwd = $('ownerPassword').value.trim();
   if(!email || !pwd){ alert('Enter email and password'); return; }
-  auth.signInWithEmailAndPassword(email, pwd)
-    .then(userCred=>{
-      const uid = userCred.user.uid;
-      $('ownerAuthMsg').textContent = 'Signed in as UID: ' + uid;
-      if(uid !== OWNER_UID){
-        alert('Signed in UID does not match configured OWNER UID. Owner-only actions will be blocked.');
-      }
-      hideAll(); $('ownerDashboard').classList.remove('hidden'); initOwnerView();
-    })
-    .catch(err=>{
-      alert('Sign in failed: ' + err.message);
-    });
+  try{
+    const userCred = await auth.signInWithEmailAndPassword(email, pwd);
+    const uid = userCred.user.uid;
+    $('ownerAuthMsg').textContent = 'Signed in UID: ' + uid;
+    if(uid !== OWNER_UID) {
+      alert('Signed in UID does not match OWNER_UID variable. Update OWNER_UID in code or use the owner with that UID.');
+    }
+    hideAll(); $('ownerDashboard').classList.remove('hidden'); await initOwnerView();
+  } catch(err){
+    alert('Sign in failed: ' + err.message);
+  }
 };
-$('ownerLogout').onclick = ()=>{ auth.signOut().then(()=> location.reload()); };
+$('ownerLogout').onclick = async ()=>{ await auth.signOut(); location.reload(); };
 
-/* ===== Labour login (USER ID only) ===== */
+/* ===== Labour login (ID only) ===== */
 let currentLabour = null;
-$('labourLoginBtn').onclick = ()=>{
+$('labourLoginBtn').onclick = async ()=>{
   const id = $('labUserId').value.trim();
   if(!id){ alert('Enter your User ID'); return; }
-  const lab = getLabours().find(l=> l.id === id);
-  if(!lab){ alert('User ID not found'); return; }
-  currentLabour = lab;
-  hideAll(); $('labourDashboard').classList.remove('hidden');
-  $('labourMonth').value = (new Date()).toISOString().slice(0,7);
-  renderLabourInfo(); renderLabourView();
+  try {
+    const labDoc = await db.collection('labours').doc(id).get();
+    if(!labDoc.exists){
+      alert('User ID not found in Firestore. Create labour as owner first.');
+      return;
+    }
+    currentLabour = labDoc.data();
+    currentLabour.id = labDoc.id;
+    hideAll(); $('labourDashboard').classList.remove('hidden');
+    $('labourMonth').value = (new Date()).toISOString().slice(0,7);
+    renderLabourInfo(); renderLabourView();
+  } catch(err){
+    alert('Error fetching labour: ' + err.message);
+  }
 };
 $('labourLogout').onclick = ()=> location.reload();
 
-/* ===== Initialize owner dashboard ===== */
-function initOwnerView(){
+/* ========== Firestore helper functions ========== */
+
+/* Labours collection: doc id = labour id */
+async function fetchAllLabours(){
+  const snap = await db.collection('labours').orderBy('id').get();
+  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+}
+async function fetchLabourById(id){
+  const d = await db.collection('labours').doc(id).get();
+  if(!d.exists) return null;
+  return {id: d.id, ...d.data()};
+}
+async function saveLabourToFirestore(lab){
+  // lab: {id,name,password,rate}
+  await db.collection('labours').doc(lab.id).set({
+    name: lab.name || '',
+    password: lab.password || '',
+    rate: Number(lab.rate) || 0,
+    id: lab.id
+  });
+}
+async function deleteLabourFromFirestore(id){
+  // Delete doc and associated attendance/advances/salaries docs (best-effort)
+  await db.collection('labours').doc(id).delete();
+  // attendance docs named id_month
+  const attSnap = await db.collection('attendance').where('__name__', '>=', id + '_').get().catch(()=>({docs:[]}));
+  // Note: Firestore doesn't support startsWith easily; instead we'll try deleting documents where id starts with id + '_'
+  // For simplicity, query all attendance docs and delete those that start with id_
+  const attAll = await db.collection('attendance').get();
+  const batch = db.batch();
+  attAll.docs.forEach(doc => {
+    if(doc.id.startsWith(id + '_')) batch.delete(doc.ref);
+  });
+  const advDoc = db.collection('advances').doc(id);
+  batch.delete(advDoc);
+  const salAll = await db.collection('salaries').get();
+  salAll.docs.forEach(doc => { if(doc.id.startsWith(id + '_')) batch.delete(doc.ref); });
+  await batch.commit();
+}
+
+/* Attendance docs: id = `${labId}_${month}` with { shifts: { day: num }, rate }
+   Example doc id: "L001_2025-12"
+*/
+async function fetchAttendance(labId, month){
+  const id = `${labId}_${month}`;
+  const d = await db.collection('attendance').doc(id).get();
+  return d.exists ? d.data() : {shifts:{}, rate: null};
+}
+async function saveAttendanceForMonth(attObjMap){ 
+  // attObjMap: { "<labId>_<month>": {shifts:{}, rate: number} , ... }
+  const batch = db.batch();
+  for(const key of Object.keys(attObjMap)){
+    batch.set(db.collection('attendance').doc(key), attObjMap[key], {merge:true});
+  }
+  await batch.commit();
+}
+
+/* Advances docs: id = labour id, structure: { items: [ {date, amount, note} ] } */
+async function fetchAdvancesForLab(labId){
+  const d = await db.collection('advances').doc(labId).get();
+  return d.exists ? (d.data().items || []) : [];
+}
+async function appendAdvanceForLab(labId, advanceItem){
+  // advanceItem: {date, amount, note}
+  const ref = db.collection('advances').doc(labId);
+  await ref.set({ items: firebase.firestore.FieldValue.arrayUnion(advanceItem) }, {merge:true});
+}
+
+/* Salaries docs: id = `${labId}_${month}` with salary fields */
+async function fetchSalary(labId, month){
+  const id = `${labId}_${month}`;
+  const d = await db.collection('salaries').doc(id).get();
+  return d.exists ? d.data() : null;
+}
+async function saveSalaryRecord(labId, month, payload){
+  const id = `${labId}_${month}`;
+  await db.collection('salaries').doc(id).set(payload, {merge:true});
+}
+
+/* Helper: collect all attendance docs for a month (for owner table export) */
+async function collectAttendanceForMonth(month){
+  // We will fetch all labours and then fetch each attendance doc for that labour_month; fewer reads than scanning whole collection.
+  const labs = await fetchAllLabours();
+  const rows = [];
+  for(const [i,l] of labs.entries()){
+    const key = `${l.id}_${month}`;
+    const doc = await db.collection('attendance').doc(key).get();
+    const rec = doc.exists ? doc.data() : {shifts:{}};
+    rows.push({ sno: i+1, id: l.id, name: l.name, shifts: rec.shifts || {}, rate: rec.rate || l.rate });
+  }
+  return { rows, labs };
+}
+
+/* ========== UI functions that use Firestore ========== */
+
+/* Init owner view: fetch labours to render */
+async function initOwnerView(){
   $('ownerMonth').value = (new Date()).toISOString().slice(0,7);
   $('advMonth').value = $('ownerMonth').value;
   $('salaryMonth').value = $('ownerMonth').value;
-  generateOwnerTable();
-  renderLabourList();
-  populateAdvSelect();
-  renderAdvances();
-  renderSalarySheet();
+  await generateOwnerTable();
+  await renderLabourList();
+  await populateAdvSelect();
+  await renderAdvances();
+  await renderSalarySheet();
 }
 
-/* ===== Attendance table (owner) ===== */
-function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
-function getDays(monthStr){
-  const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m);
-  const arr = []; for(let d=1; d<=n; d++) arr.push(d); return arr;
-}
-
-function generateOwnerTable(){
+/* Generate owner attendance table (pulls attendance docs from Firestore) */
+async function generateOwnerTable(){
   const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; }
-  const labs = getLabours(); const att = getAttendance(); const days = getDays(month);
+  const days = getDays(month);
+  const labs = await fetchAllLabours();
+  // fetch attendance docs for each labour
+  const attMap = {};
+  // parallel fetch
+  await Promise.all(labs.map(async l => {
+    const key = `${l.id}_${month}`;
+    const d = await db.collection('attendance').doc(key).get();
+    attMap[l.id] = d.exists ? d.data() : {shifts:{}, rate: l.rate};
+  }));
   let html = '<table id="ownerTable"><thead><tr><th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>';
   days.forEach(d=> html += `<th>${d}</th>`);
   html += '<th>Total</th><th>Actions</th></tr></thead><tbody>';
   labs.forEach((l,i)=>{
-    const key = l.id + '_' + month; const rec = att[key] || {shifts:{}, rate:l.rate};
+    const rec = attMap[l.id] || {shifts:{}, rate:l.rate};
     let total = 0;
     html += `<tr data-id="${l.id}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
-    days.forEach(d=>{ const v = rec.shifts && rec.shifts[d] !== undefined ? rec.shifts[d] : 0; total += Number(v)||0; html += `<td><input type="number" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:68px"></td>`;});
+    days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; html += `<td><input type="number" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:68px"></td>`;});
     html += `<td class="rowTotal">${total}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}','${month}')">View</button></td></tr>`;
   });
   html += '</tbody></table>';
@@ -321,26 +395,26 @@ function updateRowTotals(){
   });
 }
 
-/* ===== Owner action guard =====
-   Require owner to be signed in with OWNER_UID to perform owner-only writes.
-   This is client-side guard; Firestore rules must still be set server-side (you already did).
-*/
-function isOwnerSignedIn(){
-  const u = auth.currentUser;
-  return u && u.uid === OWNER_UID;
-}
-
-/* Save attendance */
-$('saveAll').onclick = ()=>{
-  if(!isOwnerSignedIn()){ alert('Owner sign-in required to save. Please sign in with owner email/password.'); return; }
+/* Save attendance to Firestore (owner-only) */
+$('saveAll').onclick = async ()=>{
+  if(!isOwnerSignedIn()){ alert('Owner sign-in required to save.'); return; }
   const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; }
-  const att = getAttendance();
+  // Build map of docId -> payload
+  const toSave = {};
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
-    const id = tr.dataset.id; const key = id + '_' + month; att[key] = att[key] || {shifts:{}, rate: getLabours().find(l=>l.id===id).rate};
-    tr.querySelectorAll('.attCell').forEach(ci => { const d = ci.dataset.day; att[key].shifts[d] = Number(ci.value) || 0; });
+    const id = tr.dataset.id;
+    const key = `${id}_${month}`;
+    const shifts = {};
+    tr.querySelectorAll('.attCell').forEach(ci => { const d = ci.dataset.day; shifts[d] = Number(ci.value) || 0; });
+    const rate = Number(getRateForLabour(id)) || null;
+    toSave[key] = { shifts, rate };
   });
-  setAttendance(att);
-  alert('Attendance saved locally');
+  try {
+    await saveAttendanceForMonth(toSave);
+    alert('Attendance saved to Firestore.');
+  } catch(err){
+    alert('Save failed: ' + err.message);
+  }
 };
 
 /* Owner search */
@@ -352,40 +426,54 @@ function ownerFilter(){
   });
 }
 
-/* ===== Advances (owner) ===== */
-function populateAdvSelect(){ const sel = $('advLab'); sel.innerHTML = ''; getLabours().forEach(l=>{ const o=document.createElement('option'); o.value=l.id; o.textContent=l.id+' - '+l.name; sel.appendChild(o);} ); }
+/* Advances UI */
+async function populateAdvSelect(){
+  const sel = $('advLab'); sel.innerHTML = '';
+  const labs = await fetchAllLabours();
+  labs.forEach(l => {
+    const o = document.createElement('option'); o.value = l.id; o.textContent = l.id + ' - ' + l.name; sel.appendChild(o);
+  });
+}
+
 $('showAdv').onclick = renderAdvances;
 
-/* Render advances: totals by labour (dates sorted when viewing) */
-function renderAdvances(){
+async function renderAdvances(){
   const month = $('advMonth').value || $('ownerMonth').value;
-  const adv = getAdvances(); const labs = getLabours();
+  const labs = await fetchAllLabours();
   const tbody = document.querySelector('#advTable tbody'); tbody.innerHTML = '';
-  labs.forEach((l,i)=>{
-    const listAll = (adv[l.id]||[]).slice();
-    const list = listAll.filter(a=>a.date && a.date.startsWith(month)).sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
-    const tot = list.reduce((s,x)=> s + (Number(x.amount)||0), 0);
+  for(let i=0;i<labs.length;i++){
+    const l = labs[i];
+    const items = await fetchAdvancesForLab(l.id);
+    const filtered = items.filter(a => a.date && a.date.startsWith(month));
+    const tot = filtered.reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${tot}</td><td><button onclick="prefillAdv('${l.id}')">Add</button> <button onclick="viewAdvances('${l.id}','${month}')">View</button></td>`;
     tbody.appendChild(tr);
-  });
-  populateAdvSelect();
+  }
+  await populateAdvSelect();
 }
 
-/* Save advance (owner only) */
-$('saveAdv').onclick = ()=>{
+/* Save advance (owner-only) */
+$('saveAdv').onclick = async ()=>{
   if(!isOwnerSignedIn()){ alert('Owner sign-in required to save advance.'); return; }
   const lab = $('advLab').value; const date = $('advDate').value; const amt = Number($('advAmt').value) || 0; const note = $('advNote').value;
   if(!lab || !date || amt <= 0){ alert('Select labour, date and amount'); return; }
-  const adv = getAdvances(); adv[lab] = adv[lab] || []; adv[lab].push({date, amount: amt, note}); setAdvances(adv);
-  $('advDate').value=''; $('advAmt').value=''; $('advNote').value=''; renderAdvances(); renderSalarySheet(); alert('Advance saved');
+  try{
+    await appendAdvanceForLab(lab, {date, amount: amt, note});
+    $('advDate').value=''; $('advAmt').value=''; $('advNote').value='';
+    await renderAdvances(); await renderSalarySheet();
+    alert('Advance saved to Firestore');
+  } catch(err){
+    alert('Save advance failed: ' + err.message);
+  }
 };
 $('clearAdv').onclick = ()=>{ $('advDate').value=''; $('advAmt').value=''; $('advNote').value=''; };
 function prefillAdv(id){ $('advLab').value = id; $('advDate').value = (new Date()).toISOString().slice(0,10); window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); }
 
-/* View advances for labour (opens new tab) — show chronological order (old → new) */
-function viewAdvances(id, month){
-  const adv = getAdvances(); let list = (adv[id] || []).slice();
+/* View advances (open tab) */
+async function viewAdvances(id, month){
+  const items = await fetchAdvancesForLab(id);
+  let list = items;
   if(month) list = list.filter(a=> a.date && a.date.startsWith(month));
   list.sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
   let html = `<html><head><meta charset="utf-8"><title>Advances ${id}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px}th{background:#eee}</style></head><body><h2>Advances — ${id}</h2>`;
@@ -400,19 +488,21 @@ function viewAdvances(id, month){
   const w = window.open('', '_blank'); w.document.write(html); w.document.close();
 }
 
-/* ===== Salary sheet (owner) ===== */
+/* Salary sheet UI (reads from Firestore) */
 $('showSalary').onclick = renderSalarySheet;
 
-function renderSalarySheet(){
+async function renderSalarySheet(){
   const month = $('salaryMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; }
-  const labs = getLabours(); const att = getAttendance(); const adv = getAdvances(); const sal = getSalaries();
+  const labs = await fetchAllLabours();
   const tbody = document.querySelector('#salaryTable tbody'); tbody.innerHTML = '';
-  labs.forEach((l,i)=>{
-    const key = l.id + '_' + month; const rec = att[key] || {shifts:{}, rate: l.rate};
-    const totalShift = Object.values(rec.shifts||{}).reduce((s,v)=> s + (Number(v)||0), 0);
-    const advTotal = (adv[l.id]||[]).filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
-    const saved = (sal[l.id]||{})[month] || {};
-    const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : l.rate) || Number(l.rate||0);
+  for(let i=0;i<labs.length;i++){
+    const l = labs[i];
+    const att = await fetchAttendance(l.id, month);
+    const totalShift = Object.values(att.shifts || {}).reduce((s,v)=> s + (Number(v)||0), 0);
+    const advItems = await fetchAdvancesForLab(l.id);
+    const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
+    const saved = await fetchSalary(l.id, month) || {};
+    const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (att.rate || l.rate)) || Number(l.rate||0);
     const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
     const monthlyAdvance = advTotal;
     const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0), debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
@@ -435,11 +525,11 @@ function renderSalarySheet(){
       <td><input class="sal-paymode" data-id="${l.id}" value="${paymentMode}" style="width:100px"></td>
       <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px"></td>`;
     tbody.appendChild(tr);
-  });
+  }
   document.querySelectorAll('#salaryTable input').forEach(inp => inp.addEventListener('input', salaryInputsChanged));
 }
 
-/* When salary inputs change, recalc TotalAmt and Paid (MonthlyAdvance stays readonly) */
+/* salary inputs recalc */
 function salaryInputsChanged(e){
   const id = e.target.dataset.id; if(!id) return;
   const row = Array.from(document.querySelectorAll('#salaryTable tbody tr')).find(tr => tr.querySelector('.sal-amt')?.dataset.id === id);
@@ -448,7 +538,6 @@ function salaryInputsChanged(e){
   const totalShift = Number(row.querySelector('.sal-totalShift').value) || 0;
   const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
   row.querySelector('.sal-totalAmt').value = totalAmt;
-
   const monthlyAdvance = Number(row.querySelector('.sal-monthlyAdvance').value) || 0;
   const mess = Number(row.querySelector('.sal-mess').value) || 0;
   const uf = Number(row.querySelector('.sal-uf').value) || 0;
@@ -462,79 +551,96 @@ function salaryInputsChanged(e){
   paidInput.value = calcPaid;
 }
 
-/* Save salary sheet (owner only) */
-$('saveSalary').onclick = ()=>{
+/* Save salary sheet to Firestore (owner-only) */
+$('saveSalary').onclick = async ()=>{
   if(!isOwnerSignedIn()){ alert('Owner sign-in required to save salary.'); return; }
   const month = $('salaryMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; }
-  const sal = getSalaries();
-  document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
-    const id = tr.querySelector('.sal-amt').dataset.id;
-    sal[id] = sal[id] || {};
-    sal[id][month] = {
-      amtPerShift: Number(tr.querySelector('.sal-amt').value) || 0,
-      totalShift: Number(tr.querySelector('.sal-totalShift').value) || 0,
-      totalAmt: Number(tr.querySelector('.sal-totalAmt').value) || 0,
-      monthlyAdvance: Number(tr.querySelector('.sal-monthlyAdvance').value) || 0,
-      mess: Number(tr.querySelector('.sal-mess').value) || 0,
-      uf: Number(tr.querySelector('.sal-uf').value) || 0,
-      pf: Number(tr.querySelector('.sal-pf').value) || 0,
-      debit: Number(tr.querySelector('.sal-debit').value) || 0,
-      jvc: Number(tr.querySelector('.sal-jvc').value) || 0,
-      other: Number(tr.querySelector('.sal-other').value) || 0,
-      paymentMode: tr.querySelector('.sal-paymode').value || '',
-      paid: Number(tr.querySelector('.sal-paid').value) || 0
-    };
-  });
-  setSalaries(sal);
-  alert('Salary sheet saved for ' + month);
+  try{
+    const rows = document.querySelectorAll('#salaryTable tbody tr');
+    for(const r of rows){
+      const id = r.querySelector('.sal-amt').dataset.id;
+      const payload = {
+        amtPerShift: Number(r.querySelector('.sal-amt').value) || 0,
+        totalShift: Number(r.querySelector('.sal-totalShift').value) || 0,
+        totalAmt: Number(r.querySelector('.sal-totalAmt').value) || 0,
+        monthlyAdvance: Number(r.querySelector('.sal-monthlyAdvance').value) || 0,
+        mess: Number(r.querySelector('.sal-mess').value) || 0,
+        uf: Number(r.querySelector('.sal-uf').value) || 0,
+        pf: Number(r.querySelector('.sal-pf').value) || 0,
+        debit: Number(r.querySelector('.sal-debit').value) || 0,
+        jvc: Number(r.querySelector('.sal-jvc').value) || 0,
+        other: Number(r.querySelector('.sal-other').value) || 0,
+        paymentMode: r.querySelector('.sal-paymode').value || '',
+        paid: Number(r.querySelector('.sal-paid').value) || 0
+      };
+      await saveSalaryRecord(id, month, payload);
+    }
+    alert('Salary sheet saved to Firestore for ' + month);
+  } catch(err){
+    alert('Save salary failed: ' + err.message);
+  }
 };
 
-/* ===== Exports ===== */
-function collectShiftRows(month){
-  const labs = getLabours(); const att = getAttendance(); const days = getDays(month);
-  const rows = labs.map((l,i)=>{
-    const key = l.id + '_' + month; const rec = att[key] || {shifts:{}};
-    let total = 0; const dayVals = []; days.forEach(d => { const v = Number(rec.shifts && rec.shifts[d] !== undefined ? rec.shifts[d] : 0) || 0; dayVals.push(v); total += v; });
-    return {sno:i+1, id:l.id, name:l.name, days: dayVals, total};
-  });
-  return {rows, days};
+/* Export helpers (collect attendance/salary from Firestore per month) */
+async function collectShiftRows(month){
+  const labs = await fetchAllLabours();
+  const rows = [];
+  for(const [i,l] of labs.entries()){
+    const key = `${l.id}_${month}`;
+    const doc = await db.collection('attendance').doc(key).get();
+    const rec = doc.exists ? doc.data() : {shifts:{}};
+    const days = getDays(month);
+    const dayVals = [], total=0;
+    let tot=0;
+    for(const d of days){ const v = Number(rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0) || 0; dayVals.push(v); tot += v; }
+    rows.push({sno:i+1, id:l.id, name:l.name, days: dayVals, total: tot});
+  }
+  return {rows, days: getDays(month)};
 }
-function exportShiftCSV(){ const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; } const data=collectShiftRows(month); const header=['S.No','User ID','Name', ...data.days.map(String), 'Total']; const csv=[header.join(',')].concat(data.rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, ...r.days, r.total].join(','))).join('\n'); downloadBlob(csv, `shifts_${month}.csv`, 'text/csv'); }
-function exportShiftXLS(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=collectShiftRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; data.rows.forEach(r=>{ html+='<tr>'; html+=`<td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td>` + r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`;}); html+='</table>'; downloadBlob('\uFEFF'+html, `shifts_${month}.xls`, 'application/vnd.ms-excel'); }
-function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=collectShiftRows(month); let html=`<html><head><meta charset="utf-8"><title>Shift sheet ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Shift sheet — ${month}</h2><table><thead><tr>`+ ['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+`</tr></thead><tbody>`; data.rows.forEach(r=>{ html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td>`+ r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`; }); html+='</tbody></table><p style="color:#666">Generated by Shift Portal</p></body></html>'; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
+async function exportShiftCSV(){ const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; } const data=await collectShiftRows(month); const header=['S.No','User ID','Name', ...data.days.map(String), 'Total']; const csv=[header.join(',')].concat(data.rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, ...r.days, r.total].join(','))).join('\n'); downloadBlob(csv, `shifts_${month}.csv`, 'text/csv'); }
+async function exportShiftXLS(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; data.rows.forEach(r=>{ html+='<tr>'; html+=`<td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td>` + r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`;}); html+='</table>'; downloadBlob('\uFEFF'+html, `shifts_${month}.xls`, 'application/vnd.ms-excel'); }
+async function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); let html=`<html><head><meta charset="utf-8"><title>Shift sheet ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Shift sheet — ${month}</h2><table><thead><tr>`+ ['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+`</tr></thead><tbody>`; data.rows.forEach(r=>{ html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td>`+ r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`; }); html+='</tbody></table><p style="color:#666">Generated by Shift Portal (Firestore)</p></body></html>'; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
-/* Salary export helpers */
-function collectSalaryRows(month){
-  const labs = getLabours(); const att = getAttendance(); const adv = getAdvances(); const sal = getSalaries();
-  return labs.map((l,i)=>{
-    const key = l.id + '_' + month; const rec = att[key] || {shifts:{}};
-    const totalShift = Object.values(rec.shifts||{}).reduce((s,v)=> s + (Number(v)||0), 0);
-    const saved = (sal[l.id]||{})[month] || {};
-    const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : l.rate) || Number(l.rate||0);
+async function collectSalaryRows(month){
+  const labs = await fetchAllLabours(); const rows = [];
+  for(const [i,l] of labs.entries()){
+    const att = await fetchAttendance(l.id, month);
+    const totalShift = Object.values(att.shifts||{}).reduce((s,v)=> s + (Number(v)||0), 0);
+    const saved = await fetchSalary(l.id, month) || {};
+    const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (att.rate || l.rate)) || Number(l.rate||0);
     const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
-    const advTotal = (adv[l.id]||[]).filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
+    const advItems = await fetchAdvancesForLab(l.id);
+    const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0), debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
     const paid = Number(saved.paid !== undefined ? saved.paid : (totalAmt - (advTotal + mess + uf + pf + debit + jvc + other))).toFixed(2);
-    return {sno:i+1, id:l.id, name:l.name, amtPerShift, totalShift, totalAmt, monthlyAdvance: advTotal, mess, uf, pf, debit, jvc, other, paymentMode: saved.paymentMode||'', paid};
-  });
+    rows.push({sno:i+1, id:l.id, name:l.name, amtPerShift, totalShift, totalAmt, monthlyAdvance: advTotal, mess, uf, pf, debit, jvc, other, paymentMode: saved.paymentMode||'', paid});
+  }
+  return rows;
 }
-function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=collectSalaryRows(month); const header=['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary']; const csv=[header.join(',')].concat(rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, `"${r.paymentMode}"`, r.paid].join(','))).join('\n'); downloadBlob(csv, `salary_${month}.csv`, 'text/csv'); }
-function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
-function exportSalaryPDF(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=collectSalaryRows(month); let html=`<html><head><meta charset="utf-8"><title>Salary ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}</style></head><body><h2>Salary sheet — ${month}</h2><table><thead><tr>`; ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].forEach(h=> html += `<th>${h}</th>`); html += `</tr></thead><tbody>`; rows.forEach(r=> html += `<tr><td>${r.sno}</td><td>${r.id}</td><td style="text-align:left;padding-left:6px">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += `</tbody></table><p style="color:#666">Generated by Salary Portal</p></body></html>`; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
+async function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); const header=['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary']; const csv=[header.join(',')].concat(rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, `"${r.paymentMode}"`, r.paid].join(','))).join('\n'); downloadBlob(csv, `salary_${month}.csv`, 'text/csv'); }
+async function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
+async function exportSalaryPDF(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); let html=`<html><head><meta charset="utf-8"><title>Salary ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}</style></head><body><h2>Salary sheet — ${month}</h2><table><thead><tr>`; ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].forEach(h=> html += `<th>${h}</th>`); html += `</tr></thead><tbody>`; rows.forEach(r=> html += `<tr><td>${r.sno}</td><td>${r.id}</td><td style="text-align:left;padding-left:6px">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += `</tbody></table><p style="color:#666">Generated by Salary Portal (Firestore)</p></body></html>`; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
 function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
-/* ===== Labour management (owner actions which are gated by isOwnerSignedIn) ===== */
-function renderLabourList(){ const labs=getLabours(); let html='<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Actions</th></tr></thead><tbody>'; labs.forEach((l,i)=> html += `<tr><td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`); html += '</tbody></table>'; $('labourList').innerHTML = html; }
+/* ===== Labour management (owner-only) ===== */
+async function renderLabourList(){
+  const labs = await fetchAllLabours();
+  let html='<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Actions</th></tr></thead><tbody>';
+  labs.forEach((l,i)=> html += `<tr><td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`);
+  html += '</tbody></table>';
+  $('labourList').innerHTML = html;
+}
 $('addLabour').onclick = ()=> openLabourModal();
 
 function openLabourModal(editId){
   $('labourModal').classList.remove('hidden');
   if(editId){
-    const lab = getLabours().find(x=>x.id===editId);
-    $('labourModalTitle').textContent = 'Edit Labour';
-    $('modalUserId').value = lab.id; $('modalName').value = lab.name; $('modalPwd').value = lab.password; $('modalRate').value = lab.rate;
-    $('labourModal').dataset.edit = editId;
+    fetchLabourById(editId).then(lab=>{
+      $('labourModalTitle').textContent = 'Edit Labour';
+      $('modalUserId').value = lab.id; $('modalName').value = lab.name; $('modalPwd').value = lab.password; $('modalRate').value = lab.rate;
+      $('labourModal').dataset.edit = editId;
+    }).catch(()=>{ alert('Failed to fetch labour'); });
   } else {
     $('labourModalTitle').textContent = 'Add Labour';
     $('modalUserId').value=''; $('modalName').value=''; $('modalPwd').value='1234'; $('modalRate').value='500';
@@ -544,36 +650,32 @@ function openLabourModal(editId){
 function openEditLabour(id){ openLabourModal(id); }
 $('cancelLabourBtn').onclick = ()=> $('labourModal').classList.add('hidden');
 
-$('saveLabourBtn').onclick = ()=>{
-  if(!isOwnerSignedIn()){ alert('Owner sign-in required to add/edit labour.'); return; }
+$('saveLabourBtn').onclick = async ()=>{
+  if(!isOwnerSignedIn()){ alert('Owner sign-in required'); return; }
   const id=$('modalUserId').value.trim(), name=$('modalName').value.trim(), pwd=$('modalPwd').value.trim(), rate=Number($('modalRate').value)||0;
   if(!id||!name){ alert('Enter ID and name'); return; }
-  const labs=getLabours(); const edit=$('labourModal').dataset.edit;
-  if(edit){
-    const idx=labs.findIndex(x=>x.id===edit); if(idx===-1){ alert('Original not found'); return;}
-    if(edit !== id && labs.some(x=>x.id===id)){ alert('ID exists'); return; }
-    if(edit !== id){
-      const att=getAttendance(), moved={}; Object.keys(att).forEach(k=>{ if(k.startsWith(edit + '_')){ const suffix = k.slice((edit + '_').length); moved[id + '_' + suffix] = att[k]; delete att[k]; }});
-      Object.assign(att, moved); setAttendance(att);
-      const adv=getAdvances(); if(adv[edit]){ adv[id] = adv[id]||[]; adv[id] = adv[id].concat(adv[edit]); delete adv[edit]; setAdvances(adv); }
-      const sal=getSalaries(); if(sal[edit]){ sal[id] = sal[id] || {}; Object.keys(sal[edit]).forEach(k=> sal[id][k] = sal[edit][k]); delete sal[edit]; setSalaries(sal); }
-    }
-    labs[idx] = {id, name, password: pwd, rate}; setLabours(labs);
-    $('labourModal').classList.add('hidden'); renderLabourList(); generateOwnerTable(); populateAdvSelect(); renderSalarySheet();
+  try{
+    await saveLabourToFirestore({id, name, password: pwd, rate});
+    $('labourModal').classList.add('hidden'); await renderLabourList(); await generateOwnerTable(); await populateAdvSelect(); await renderSalarySheet();
     alert('Saved');
-    return;
-  }
-  if(labs.some(x=>x.id===id)){ alert('User exists'); return;}
-  labs.push({id, name, password: pwd, rate}); setLabours(labs); $('labourModal').classList.add('hidden'); renderLabourList(); generateOwnerTable(); populateAdvSelect(); renderSalarySheet(); alert('Added');
+  } catch(err){ alert('Save failed: ' + err.message); }
 };
 
-function deleteLabour(id){ if(!isOwnerSignedIn()){ alert('Owner sign-in required to delete labour.'); return; } if(!confirm('Delete labour and all data?')) return; let labs=getLabours(); labs = labs.filter(x=>x.id !== id); setLabours(labs); const att=getAttendance(); Object.keys(att).forEach(k=>{ if(k.startsWith(id + '_')) delete att[k]; }); setAttendance(att); const adv=getAdvances(); delete adv[id]; setAdvances(adv); const sal=getSalaries(); delete sal[id]; setSalaries(sal); renderLabourList(); generateOwnerTable(); renderSalarySheet(); renderAdvances(); }
+async function deleteLabour(id){
+  if(!isOwnerSignedIn()){ alert('Owner sign-in required to delete labour.'); return; }
+  if(!confirm('Delete labour and all data?')) return;
+  try{
+    await deleteLabourFromFirestore(id);
+    await renderLabourList(); await generateOwnerTable(); await renderSalarySheet(); await renderAdvances();
+    alert('Deleted ' + id);
+  } catch(err){ alert('Delete failed: ' + err.message); }
+}
 
-/* ===== Labour portal view ===== */
+/* ===== Labour UI (view only) ===== */
 function renderLabourInfo(){ if(!currentLabour) return; $('labourInfo').innerHTML = `<p><strong>${currentLabour.name}</strong> (ID: ${currentLabour.id})</p>`; }
-function renderLabourView(){
+async function renderLabourView(){
   if(!currentLabour) return; const month = $('labourMonth').value; if(!month) return;
-  const att = getAttendance(); const key = currentLabour.id + '_' + month; const rec = att[key] || {shifts:{}};
+  const rec = await fetchAttendance(currentLabour.id, month);
   const days = getDays(month);
   let html = '<h3>Attendance</h3><table><thead><tr><th>Date</th><th>Shifts</th></tr></thead><tbody>';
   let total = 0;
@@ -581,13 +683,14 @@ function renderLabourView(){
   html += `</tbody></table><p class="small">Total shifts: ${total}</p>`;
   $('labourAttendance').innerHTML = html;
 
-  const adv = getAdvances(); const advAllForLab = (adv[currentLabour.id]||[]).slice(); const advList = advAllForLab.filter(a=> a.date && a.date.startsWith(month)).sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+  const advItemsAll = await fetchAdvancesForLab(currentLabour.id);
+  const advList = advItemsAll.filter(a=> a.date && a.date.startsWith(month)).sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
   let advHtml = '<h3>Advances</h3>';
   if(!advList.length) advHtml += '<p class="small">No advances for month</p>'; else { advHtml += '<table><thead><tr><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>'; advList.slice().reverse().forEach(a=> advHtml += `<tr><td>${a.date}</td><td style="text-align:right">₹${a.amount}</td><td class="left">${a.note||''}</td></tr>`); advHtml += '</tbody></table>'; advHtml += `<p class="small"><strong>Total: ₹${advList.reduce((s,x)=> s+(Number(x.amount)||0),0)}</strong></p>`; }
   $('labourAdvance').innerHTML = advHtml;
 
-  const sal = getSalaries(); const saved = (sal[currentLabour.id]||{})[month] || {};
-  const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : currentLabour.rate) || currentLabour.rate;
+  const saved = await fetchSalary(currentLabour.id, month) || {};
+  const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (rec.rate||currentLabour.rate)) || currentLabour.rate;
   const totalShift = Object.values(rec.shifts||{}).reduce((s,v)=> s + (Number(v)||0), 0);
   const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
   const advTotal = advList.reduce((s,x)=> s + (Number(x.amount)||0), 0);
@@ -612,18 +715,29 @@ function renderLabourView(){
   $('labourSalary').innerHTML = salaryHtml;
 }
 
-/* ===== Backup export ===== */
-$('exportBackup').onclick = ()=>{ const payload = {labours: getLabours(), attendance: getAttendance(), advances: getAdvances(), salaries: getSalaries()}; downloadBlob(JSON.stringify(payload,null,2),'portal_backup.json','application/json'); };
+/* ===== Ownership/sign-in guard ===== */
+function isOwnerSignedIn(){
+  const user = auth.currentUser;
+  return user && user.uid === OWNER_UID;
+}
+auth.onAuthStateChanged(user => {
+  // update ownerAuthMsg for convenience
+  if(user) $('ownerAuthMsg').textContent = 'Signed in as UID: ' + user.uid;
+  else $('ownerAuthMsg').textContent = '';
+});
 
-$('exportShiftCSV').onclick = exportShiftCSV;
-$('exportShiftXLS').onclick = exportShiftXLS;
-$('exportShiftPDF').onclick = exportShiftPDF;
-$('exportSalaryCSV').onclick = exportSalaryCSV;
-$('exportSalaryXLS').onclick = exportSalaryXLS;
-$('exportSalaryPDF').onclick = exportSalaryPDF;
+/* ===== Utility functions ===== */
+function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+function getDays(monthStr){ const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m); const arr=[]; for(let d=1; d<=n; d++) arr.push(d); return arr; }
+function getRateForLabour(id){ /* In case we cached rates locally, we can fetch doc. Simpler: synchronous fetch not possible; use stored labours from rendering. */ return 0; }
 
-/* ===== Onload initial rendering ===== */
-window.addEventListener('load', ()=>{ renderLabourList(); populateAdvSelect(); });
+/* ===== On load initial rendering: fetch labours to show in lists where possible ===== */
+window.addEventListener('load', async ()=>{
+  try{
+    await renderLabourList();
+    await populateAdvSelect();
+  }catch(e){ console.warn('Init load: ', e.message); }
+});
 </script>
 </body>
 </html>
