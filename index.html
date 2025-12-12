@@ -111,11 +111,14 @@
           <table id="advTable"><thead><tr><th>S.No</th><th>ID</th><th>Name</th><th>Total (₹)</th><th>Actions</th></tr></thead><tbody></tbody></table>
         </div>
         <div style="width:360px">
-          <h4>Add Advance</h4>
-          <label>Labour</label>
-          <select id="advLab" style="width:100%"></select>
+          <h4 id="addAdvTitle">Add Advance</h4>
+          <label>Labour (search)</label>
+          <!-- Searchable labour input using datalist -->
+          <input id="advLab" list="advLabList" placeholder="Type ID or name..." style="width:100%">
+          <datalist id="advLabList"></datalist>
+
           <label>Date</label><input id="advDate" type="date">
-          <label>Amount (₹)</label><input id="advAmt" type="number" min="0">
+          <label>Amount (₹)</label><input id="advAmt" type="number" min="0" step="any" inputmode="decimal">
           <label>Note</label><textarea id="advNote" rows="3" style="width:100%"></textarea>
           <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" id="saveAdv">Save Advance</button>
@@ -141,7 +144,7 @@
         <table id="salaryTable"><thead><tr>
           <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
           <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-          <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th>
+          <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks / Signature</th>
         </tr></thead><tbody></tbody></table>
       </div>
       <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
@@ -172,7 +175,7 @@
     <label>User ID</label><input id="modalUserId"><br>
     <label>Name</label><input id="modalName"><br>
     <label>Password</label><input id="modalPwd"><br>
-    <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0"><br>
+    <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0" step="any"><br>
     <!-- NEW: Payment mode -->
     <label>Payment Mode</label>
     <select id="modalPayMode" style="width:120px">
@@ -265,51 +268,54 @@ $('labourLogout').onclick = ()=> location.reload();
 /* ========== Firestore helper functions ========== */
 
 /* Labours collection: doc id = labour id
-   NOTE: changed to order by createdAt to preserve insertion/time order (not alphabetical)
+   We'll fetch all docs then sort by createdAt (desc) if available, otherwise keep existing order.
 */
 async function fetchAllLabours(){
-  // try ordering by createdAt; if createdAt is missing for some docs they will appear first.
-  // This preserves time-order of when labour docs were created (older -> newer).
-  const snap = await db.collection('labours').orderBy('createdAt','asc').get().catch(async ()=>{
-    // fallback: if ordering by createdAt fails (no index), return unsorted by id
-    const s = await db.collection('labours').get();
-    return s;
+  const snap = await db.collection('labours').get();
+  const arr = snap.docs.map(d => {
+    const data = d.data();
+    return { id: d.id, __createdAt: data.createdAt || null, ...data };
   });
-  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  // Sort: those with createdAt first (desc), then those without (original order)
+  arr.sort((a,b) => {
+    if(a.__createdAt && b.__createdAt) return (b.__createdAt.seconds || b.__createdAt._seconds || 0) - (a.__createdAt.seconds || a.__createdAt._seconds || 0);
+    if(a.__createdAt) return -1;
+    if(b.__createdAt) return 1;
+    return 0;
+  });
+  return arr;
 }
-
 async function fetchLabourById(id){
   const d = await db.collection('labours').doc(id).get();
   if(!d.exists) return null;
   return {id: d.id, ...d.data()};
 }
-
-/*
-  saveLabourToFirestore: when creating a new labour we set createdAt = serverTimestamp()
-  so later fetchAllLabours() can order by createdAt (time order) rather than alphabetically.
-  We detect existence of doc and set createdAt only for new docs.
-*/
 async function saveLabourToFirestore(lab){
   // lab: {id,name,password,rate,paymentMode}
+  // Preserve createdAt if updating; add createdAt on create
   const ref = db.collection('labours').doc(lab.id);
-  const existing = await ref.get();
-  const payload = {
-    name: lab.name || '',
-    password: lab.password || '',
-    rate: Number(lab.rate) || 0,
-    paymentMode: lab.paymentMode || 'Cash',
-    id: lab.id
-  };
-  if(!existing.exists){
-    // set createdAt only for new documents
-    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-    await ref.set(payload, {merge:true});
+  const doc = await ref.get();
+  if(doc.exists){
+    // update, keep createdAt
+    await ref.set({
+      name: lab.name || '',
+      password: lab.password || '',
+      rate: Number(lab.rate) || 0,
+      paymentMode: lab.paymentMode || 'Cash',
+      id: lab.id
+    }, {merge:true});
   } else {
-    // update existing (preserve createdAt)
-    await ref.set(payload, {merge:true});
+    // new labour: add createdAt
+    await ref.set({
+      name: lab.name || '',
+      password: lab.password || '',
+      rate: Number(lab.rate) || 0,
+      paymentMode: lab.paymentMode || 'Cash',
+      id: lab.id,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
   }
 }
-
 async function deleteLabourFromFirestore(id){
   // Delete doc and associated attendance/advances/salaries docs (best-effort)
   await db.collection('labours').doc(id).delete();
@@ -410,12 +416,19 @@ async function generateOwnerTable(){
     const rec = attMap[l.id] || {shifts:{}, rate:l.rate};
     let total = 0;
     html += `<tr data-id="${l.id}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
-    days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; html += `<td><input type="number" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:68px"></td>`;});
+    days.forEach(d=>{ 
+      const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0;
+      total += Number(v)||0;
+      // allow decimals (step="any") and don't auto-select on focus
+      html += `<td><input type="number" step="any" inputmode="decimal" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:68px"></td>`;
+    });
     html += `<td class="rowTotal">${total}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}','${month}')">View</button></td></tr>`;
   });
   html += '</tbody></table>';
   $('ownerTableWrap').innerHTML = html;
   document.querySelectorAll('.attCell').forEach(i => i.addEventListener('input', ()=>{ updateRowTotals(); ownerFilter(); }));
+  // enable arrow navigation for shift cells
+  enableArrowNavigation();
   updateRowTotals();
 }
 $('loadTable').onclick = generateOwnerTable;
@@ -424,6 +437,86 @@ function updateRowTotals(){
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
     let s = 0; tr.querySelectorAll('.attCell').forEach(ci=> s += Number(ci.value) || 0);
     const cell = tr.querySelector('.rowTotal'); if(cell) cell.textContent = s;
+  });
+}
+
+/* Arrow-key navigation and movement for attendance cells (no auto-select on focus) */
+function enableArrowNavigation(){
+  // This function wires keyboard nav for attCell inputs inside the owner table.
+  const table = document.querySelector('#ownerTable');
+  if(!table) return;
+
+  // helper: find input at rowIndex, colIndex (table cell index)
+  function getInputAt(rowIndex, cellIndex){
+    const tr = table.rows[rowIndex];
+    if(!tr) return null;
+    const td = tr.cells[cellIndex];
+    if(!td) return null;
+    return td.querySelector('input');
+  }
+
+  // attach to each attCell
+  table.querySelectorAll('.attCell').forEach(input => {
+    // remove existing handlers to avoid duplication
+    input.onkeydown = null;
+    input.onkeyup = null;
+
+    input.addEventListener('keydown', function(e){
+      const td = input.parentElement;
+      const tr = td.parentElement;
+      const rowIdx = tr.sectionRowIndex + 1; // sectionRowIndex starts 0 for tbody
+      // compute cell index in the whole row (including sticky cols)
+      const cellIdx = td.cellIndex;
+      // ArrowRight
+      if(e.key === 'ArrowRight'){
+        e.preventDefault();
+        const next = getInputAt(rowIdx, cellIdx + 1);
+        if(next) next.focus();
+      } else if(e.key === 'ArrowLeft'){
+        e.preventDefault();
+        const prev = getInputAt(rowIdx, cellIdx - 1);
+        if(prev) prev.focus();
+      } else if(e.key === 'ArrowDown'){
+        e.preventDefault();
+        const down = getInputAt(rowIdx + 1, cellIdx);
+        if(down) down.focus();
+      } else if(e.key === 'ArrowUp'){
+        e.preventDefault();
+        const up = getInputAt(rowIdx - 1, cellIdx);
+        if(up) up.focus();
+      } else if(e.key === 'Enter'){
+        e.preventDefault();
+        const down = getInputAt(rowIdx + 1, cellIdx);
+        if(down) down.focus();
+      } else if(e.key === 'Tab'){
+        // let the browser handle tab across the page, but we override to move to next cell in table
+        e.preventDefault();
+        if(e.shiftKey){
+          const prev = getInputAt(rowIdx, cellIdx - 1);
+          if(prev) prev.focus();
+        } else {
+          const next = getInputAt(rowIdx, cellIdx + 1);
+          if(next) next.focus();
+        }
+      }
+    });
+
+    // allow typing decimal point and numbers; do not auto-select
+    input.addEventListener('input', function(){
+      // simply update row totals when value changes
+      updateRowTotals();
+    });
+
+    // Optional: numeric-key quick next behavior (if desired)
+    input.addEventListener('keyup', function(e){
+      // if user typed a number or '.' move to next cell optionally (not forced)
+      const key = e.key;
+      if(/^[0-9.]$/.test(key)){
+        // don't auto-advance aggressively — comment out if undesired
+        // const td = input.parentElement; const tr = td.parentElement; const rowIdx = tr.sectionRowIndex + 1; const cellIdx = td.cellIndex;
+        // const next = getInputAt(rowIdx, cellIdx + 1); if(next) next.focus();
+      }
+    });
   });
 }
 
@@ -459,10 +552,18 @@ function ownerFilter(){
 
 /* Advances UI */
 async function populateAdvSelect(){
-  const sel = $('advLab'); sel.innerHTML = '';
+  // populate datalist for searchable advLab input
+  const data = document.getElementById('advLabList');
+  data.innerHTML = '';
   const labs = await fetchAllLabours();
+  // add options as "ID - Name" and also ID alone for quick selection
   labs.forEach(l => {
-    const o = document.createElement('option'); o.value = l.id; o.textContent = l.id + ' - ' + l.name; sel.appendChild(o);
+    const opt = document.createElement('option');
+    opt.value = `${l.id} - ${l.name}`;
+    data.appendChild(opt);
+    const opt2 = document.createElement('option');
+    opt2.value = l.id;
+    data.appendChild(opt2);
   });
 }
 
@@ -472,9 +573,11 @@ async function renderAdvances(){
   const month = $('advMonth').value || $('ownerMonth').value;
   const labs = await fetchAllLabours();
   const tbody = document.querySelector('#advTable tbody'); tbody.innerHTML = '';
+  // The user wanted "name save by time order not alphabetical" — we fetchAllLabours which sorts by createdAt desc when available
   for(let i=0;i<labs.length;i++){
     const l = labs[i];
     const items = await fetchAdvancesForLab(l.id);
+    // preserve insertion order (array order) then filter by month
     const filtered = items.filter(a => a.date && a.date.startsWith(month));
     const tot = filtered.reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const tr = document.createElement('tr');
@@ -487,28 +590,35 @@ async function renderAdvances(){
 /* Save advance (owner-only) */
 $('saveAdv').onclick = async ()=>{
   if(!isOwnerSignedIn()){ alert('Owner sign-in required to save advance.'); return; }
-  const lab = $('advLab').value; const date = $('advDate').value; const amt = Number($('advAmt').value) || 0; const note = $('advNote').value;
-  if(!lab || !date || amt <= 0){ alert('Select labour, date and amount'); return; }
+  let labVal = $('advLab').value.trim();
+  if(!labVal){ alert('Enter labour (ID or "ID - Name")'); return; }
+  // normalize lab id if user typed "L001 - Name" or "L001"
+  const possibleId = labVal.split(' - ')[0].trim();
+  const labId = possibleId;
+  const date = $('advDate').value; const amt = Number($('advAmt').value) || 0; const note = $('advNote').value;
+  if(!labId || !date || amt <= 0){ alert('Select labour, date and amount'); return; }
   try{
-    await appendAdvanceForLab(lab, {date, amount: amt, note});
-    $('advDate').value=''; $('advAmt').value=''; $('advNote').value='';
+    await appendAdvanceForLab(labId, {date, amount: amt, note});
+    $('advDate').value=''; $('advAmt').value=''; $('advNote').value=''; $('advLab').value='';
     await renderAdvances(); await renderSalarySheet();
-    // scroll back to top so owner dashboard is visible after save
-    window.scrollTo({ top: 0, behavior: 'smooth' });
     alert('Advance saved to Firestore');
+    // after save, scroll to top as requested
+    window.scrollTo({top:0, behavior:'smooth'});
   } catch(err){
     alert('Save advance failed: ' + err.message);
   }
 };
-$('clearAdv').onclick = ()=>{ $('advDate').value=''; $('advAmt').value=''; $('advNote').value=''; };
-
-/* Prefill advance and scroll to Add Advance area */
+$('clearAdv').onclick = ()=>{ $('advDate').value=''; $('advAmt').value=''; $('advNote').value=''; $('advLab').value=''; };
 function prefillAdv(id){
-  $('advLab').value = id;
-  $('advDate').value = (new Date()).toISOString().slice(0,10);
-  // scroll the Add Advance panel into view
-  const advPanel = document.querySelector('#advancesCard');
-  if(advPanel) advPanel.scrollIntoView({ behavior:'smooth', block:'start' });
+  // prefill using "ID - Name" for convenience
+  fetchLabourById(id).then(lab=>{
+    if(lab) $('advLab').value = `${id} - ${lab.name}`;
+    else $('advLab').value = id;
+    $('advDate').value = (new Date()).toISOString().slice(0,10);
+    // scroll to advance section and focus amount
+    document.getElementById('addAdvTitle').scrollIntoView({behavior:'smooth', block:'center'});
+    setTimeout(()=> $('advAmt').focus(), 600);
+  });
 }
 
 /* View advances (open tab) */
@@ -516,7 +626,8 @@ async function viewAdvances(id, month){
   const items = await fetchAdvancesForLab(id);
   let list = items;
   if(month) list = list.filter(a=> a.date && a.date.startsWith(month));
-  list.sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+  // preserve insertion order (assumed pushed order) and sort chronologically (old -> new) if date present
+  list.sort((a,b)=> (a.date||'') < (b.date||'') ? -1 : ((a.date||'') > (b.date||'') ? 1 : 0));
   let html = `<html><head><meta charset="utf-8"><title>Advances ${id}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px}th{background:#eee}</style></head><body><h2>Advances — ${id}</h2>`;
   if(list.length === 0) html += '<p>No advances</p>'; else {
     html += '<table><thead><tr><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>';
@@ -552,9 +663,10 @@ async function renderSalarySheet(){
     const paid = saved.paid !== undefined ? Number(saved.paid) : calcPaid;
     // NOTE: use saved.paymentMode OR labour.paymentMode OR default Cash
     const paymentMode = saved.paymentMode || l.paymentMode || 'Cash';
+    const remarks = saved.remarks || '';
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>
-      <td><input class="sal-amt" data-id="${l.id}" value="${amtPerShift}" style="width:90px"></td>
+      <td><input class="sal-amt" data-id="${l.id}" value="${amtPerShift}" style="width:90px" step="any"></td>
       <td><input class="sal-totalShift readonly" data-id="${l.id}" value="${totalShift}" readonly style="width:90px"></td>
       <td><input class="sal-totalAmt readonly" data-id="${l.id}" value="${totalAmt}" readonly style="width:110px"></td>
       <td><input class="sal-monthlyAdvance readonly" data-id="${l.id}" value="${monthlyAdvance}" readonly style="width:110px"></td>
@@ -570,7 +682,8 @@ async function renderSalarySheet(){
           <option value="A/c"${paymentMode === 'A/c' ? ' selected' : ''}>A/c</option>
         </select>
       </td>
-      <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px"></td>`;
+      <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px"></td>
+      <td><input class="sal-remarks" data-id="${l.id}" value="${remarks}" placeholder="Remarks / Signature" style="width:160px"></td>`;
     tbody.appendChild(tr);
   }
   document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => inp.addEventListener('input', salaryInputsChanged));
@@ -618,7 +731,8 @@ $('saveSalary').onclick = async ()=>{
         jvc: Number(r.querySelector('.sal-jvc').value) || 0,
         other: Number(r.querySelector('.sal-other').value) || 0,
         paymentMode: r.querySelector('.sal-paymode').value || '',
-        paid: Number(r.querySelector('.sal-paid').value) || 0
+        paid: Number(r.querySelector('.sal-paid').value) || 0,
+        remarks: r.querySelector('.sal-remarks').value || ''
       };
       await saveSalaryRecord(id, month, payload);
     }
@@ -660,62 +774,58 @@ async function collectSalaryRows(month){
     const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0), debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
     const paid = Number(saved.paid !== undefined ? saved.paid : (totalAmt - (advTotal + mess + uf + pf + debit + jvc + other))).toFixed(2);
-    // default payment mode fallbacks
     const paymentMode = (saved.paymentMode || l.paymentMode || '').toString();
-    rows.push({sno:i+1, id:l.id, name:l.name, amtPerShift, totalShift, totalAmt, monthlyAdvance: advTotal, mess, uf, pf, debit, jvc, other, paymentMode, paid});
+    const remarks = saved.remarks || '';
+    rows.push({sno:i+1, id:l.id, name:l.name, amtPerShift, totalShift, totalAmt, monthlyAdvance: advTotal, mess, uf, pf, debit, jvc, other, paymentMode, paid, remarks});
   }
   return rows;
 }
-async function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); const header=['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary']; const csv=[header.join(',')].concat(rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, `"${r.paymentMode}"`, r.paid].join(','))).join('\n'); downloadBlob(csv, `salary_${month}.csv`, 'text/csv'); }
-async function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
+async function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); const header=['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks']; const csv=[header.join(',')].concat(rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, `"${r.paymentMode}"`, r.paid, `"${(r.remarks||'').replace(/"/g,'""')}"`].join(','))).join('\n'); downloadBlob(csv, `salary_${month}.csv`, 'text/csv'); }
+async function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td><td>${r.remarks}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
 
-/* UPDATED: exportSalaryPDF now separates A/c and Cash tables (A/c first) and resets S.No for each table */
-async function exportSalaryPDF(){ 
-   const month=$('salaryMonth').value || $('ownerMonth').value; 
-   if(!month){alert('Select month');return;} 
-   const rows=await collectSalaryRows(month); 
-   const acRows = rows.filter(r => (r.paymentMode||'').toString().toLowerCase() === 'a/c'); 
-   const cashRows = rows.filter(r => (r.paymentMode||'').toString().toLowerCase() !== 'a/c'); 
+/* UPDATED: exportSalaryPDF now separates A/c and Cash tables (A/c first) and S.No restarts for each group */
+async function exportSalaryPDF(){
+   const month=$('salaryMonth').value || $('ownerMonth').value;
+   if(!month){alert('Select month');return;}
+   const rows=await collectSalaryRows(month);
+   const acRows = rows.filter(r => (r.paymentMode||'').toString().toLowerCase() === 'a/c');
+   const cashRows = rows.filter(r => (r.paymentMode||'').toString().toLowerCase() !== 'a/c');
 
-   function buildTableHtml(rowsArray, title){ 
-     if(rowsArray.length === 0) return `<h4>${title}: (none)</h4>`; 
-     let html = `<h4 style="margin-bottom:6px">${title}</h4><table><thead><tr>`; 
-     ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].forEach(h=> html += `<th>${h}</th>`); 
-     html += `</tr></thead><tbody>`; 
-     rowsArray.forEach((r, idx) => { 
-       const sno = idx + 1; // reset numbering per table
-       html += `<tr><td>${sno}</td><td>${r.id}</td><td style="text-align:left;padding-left:6px">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`; 
-     }); 
-     html += `</tbody></table>`; 
-     return html; 
-   } 
+   function buildTableHtml(rowsArray, title){
+     if(rowsArray.length === 0) return `<h4>${title}: (none)</h4>`;
+     let html = `<h4 style="margin-bottom:6px">${title}</h4><table><thead><tr>`;
+     ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks'].forEach(h=> html += `<th>${h}</th>`);
+     html += `</tr></thead><tbody>`;
+     rowsArray.forEach((r, idx) => {
+       html += `<tr><td>${idx+1}</td><td>${r.id}</td><td style="text-align:left;padding-left:6px">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td><td>${r.remarks||''}</td></tr>`;
+     });
+     html += `</tbody></table>`;
+     return html;
+   }
 
-   let html = `<html><head><meta charset="utf-8"><title>Salary ${month}</title> 
-    <style> 
-      body{font-family:Arial,Helvetica,sans-serif;color:#222} 
-      h2{margin-bottom:0} 
-      table{border-collapse:collapse;width:100%;margin-bottom:18px} 
-      th,td{border:1px solid #333;padding:6px;text-align:center;font-size:12px} 
-      th{background:#eee} 
-      td{text-align:center} 
-      td.left{text-align:left;padding-left:6px} 
-      @media print{ 
-        table{page-break-inside:auto} 
-        tr{page-break-inside:avoid;page-break-after:auto} 
-      } 
-    </style> 
-  </head><body> 
-  <h2>Salary sheet — ${month}</h2> 
-  <p style="color:#666">Generated by Salary Portal (Firestore)</p> 
-  `; 
-   // Attach A/c first 
-   html += buildTableHtml(acRows, 'Payment Mode: A/c'); 
-   // Small page break (for print) 
-   html += `<div style="height:16px"></div>`; 
-   // Cash next 
-   html += buildTableHtml(cashRows, 'Payment Mode: Cash'); 
-   html += `</body></html>`; 
-   const w=window.open('', '_blank'); w.document.write(html); w.document.close(); 
+   let html = `<html><head><meta charset="utf-8"><title>Salary ${month}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#222}
+      h2{margin-bottom:0}
+      table{border-collapse:collapse;width:100%;margin-bottom:18px}
+      th,td{border:1px solid #333;padding:6px;text-align:center;font-size:12px}
+      th{background:#eee}
+      td{text-align:center}
+      td.left{text-align:left;padding-left:6px}
+      @media print{
+        table{page-break-inside:auto}
+        tr{page-break-inside:avoid;page-break-after:auto}
+      }
+    </style>
+   </head><body>
+   <h2>Salary sheet — ${month}</h2>
+   <p style="color:#666">Generated by Salary Portal (Firestore)</p>
+   `;
+   html += buildTableHtml(acRows, 'Payment Mode: A/c');
+   html += `<div style="height:16px"></div>`;
+   html += buildTableHtml(cashRows, 'Payment Mode: Cash');
+   html += `</body></html>`;
+   const w=window.open('', '_blank'); w.document.write(html); w.document.close();
 }
 
 /* ===== ADVANCES export functions (new) ===== */
@@ -724,6 +834,7 @@ async function collectAdvForMonth(month){
   const rows = [];
   for(const [i,l] of labs.entries()){
     const items = await fetchAdvancesForLab(l.id);
+    // preserve insertion order (as pushed)
     const filtered = items.filter(a => a.date && a.date.startsWith(month));
     for(const f of filtered){
       rows.push({sno: rows.length+1, id: l.id, name: l.name, date: f.date, amount: Number(f.amount)||0, note: f.note||''});
@@ -731,56 +842,14 @@ async function collectAdvForMonth(month){
   }
   return rows;
 }
-async function exportAdvCSV(){
-  const month = $('advMonth').value || $('ownerMonth').value;
-  if(!month){ alert('Select month'); return; }
-  const rows = await collectAdvForMonth(month);
-  const header = ['S.No','User ID','Name','Date','Amount','Note'];
-  const csv = [header.join(',')].concat(rows.map(r => [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.date, r.amount, `"${(r.note||'').replace(/"/g,'""')}"`].join(','))).join('\n');
-  downloadBlob(csv, `advances_${month}.csv`, 'text/csv');
-}
-async function exportAdvXLS(){
-  const month = $('advMonth').value || $('ownerMonth').value;
-  if(!month){ alert('Select month'); return; }
-  const rows = await collectAdvForMonth(month);
-  let html = '<table border="1"><tr>' + ['S.No','User ID','Name','Date','Amount','Note'].map(h=>`<th>${h}</th>`).join('') + '</tr>';
-  rows.forEach(r => {
-    html += `<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.date}</td><td>${r.amount}</td><td>${r.note}</td></tr>`;
-  });
-  html += '</table>';
-  downloadBlob('\uFEFF'+html, `advances_${month}.xls`, 'application/vnd.ms-excel');
-}
-async function exportAdvPDF(){
-  const month = $('advMonth').value || $('ownerMonth').value;
-  if(!month){ alert('Select month'); return; }
-  const rows = await collectAdvForMonth(month);
-  let html = `<html><head><meta charset="utf-8"><title>Advances ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Advances — ${month}</h2>`;
-  if(rows.length === 0){
-    html += '<p>No advances for selected month.</p>';
-  } else {
-    html += '<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>';
-    rows.forEach(r => {
-      html += `<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td><td>${r.date}</td><td style="text-align:right">${r.amount}</td><td class="left">${r.note}</td></tr>`;
-    });
-    html += '</tbody></table>';
-    const total = rows.reduce((s,x)=> s + (Number(x.amount)||0), 0);
-    html += `<p><strong>Total Advances: ₹${total}</strong></p>`;
-  }
-  html += '</body></html>';
-  const w=window.open('', '_blank'); w.document.write(html); w.document.close();
-}
+async function exportAdvCSV(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); const header = ['S.No','User ID','Name','Date','Amount','Note']; const csv = [header.join(',')].concat(rows.map(r => [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.date, r.amount, `"${(r.note||'').replace(/"/g,'""')}"`].join(','))).join('\n'); downloadBlob(csv, `advances_${month}.csv`, 'text/csv'); }
+async function exportAdvXLS(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); let html = '<table border="1"><tr>' + ['S.No','User ID','Name','Date','Amount','Note'].map(h=>`<th>${h}</th>`).join('') + '</tr>'; rows.forEach(r => { html += `<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.date}</td><td>${r.amount}</td><td>${r.note}</td></tr>`; }); html += '</table>'; downloadBlob('\uFEFF'+html, `advances_${month}.xls`, 'application/vnd.ms-excel'); }
+async function exportAdvPDF(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); let html = `<html><head><meta charset="utf-8"><title>Advances ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Advances — ${month}</h2>`; if(rows.length === 0){ html += '<p>No advances for selected month.</p>'; } else { html += '<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>'; rows.forEach(r => { html += `<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td><td>${r.date}</td><td style="text-align:right">${r.amount}</td><td class="left">${r.note}</td></tr>`; }); html += '</tbody></table>'; const total = rows.reduce((s,x)=> s + (Number(x.amount)||0), 0); html += `<p><strong>Total Advances: ₹${total}</strong></p>`; } html += '</body></html>'; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
 /* ===== labour export event wiring (buttons) ===== */
-$('exportShiftCSV').onclick = exportShiftCSV;
-$('exportShiftXLS').onclick = exportShiftXLS;
-$('exportShiftPDF').onclick = exportShiftPDF;
-$('exportSalaryCSV').onclick = exportSalaryCSV;
-$('exportSalaryXLS').onclick = exportSalaryXLS;
-$('exportSalaryPDF').onclick = exportSalaryPDF;
-/* advances */
-$('exportAdvCSV').onclick = exportAdvCSV;
-$('exportAdvXLS').onclick = exportAdvXLS;
-$('exportAdvPDF').onclick = exportAdvPDF;
+$('exportShiftCSV').onclick = exportShiftCSV; $('exportShiftXLS').onclick = exportShiftXLS; $('exportShiftPDF').onclick = exportShiftPDF;
+$('exportSalaryCSV').onclick = exportSalaryCSV; $('exportSalaryXLS').onclick = exportSalaryXLS; $('exportSalaryPDF').onclick = exportSalaryPDF;
+/* advances */ $('exportAdvCSV').onclick = exportAdvCSV; $('exportAdvXLS').onclick = exportAdvXLS; $('exportAdvPDF').onclick = exportAdvPDF;
 
 function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
@@ -796,6 +865,8 @@ $('addLabour').onclick = ()=> openLabourModal();
 
 function openLabourModal(editId){
   $('labourModal').classList.remove('hidden');
+  // scroll to modal
+  $('labourModal').scrollIntoView({behavior:'smooth', block:'center'});
   if(editId){
     fetchLabourById(editId).then(lab=>{
       $('labourModalTitle').textContent = 'Edit Labour';
@@ -803,16 +874,12 @@ function openLabourModal(editId){
       // populate payment mode select
       $('modalPayMode').value = lab.paymentMode || 'Cash';
       $('labourModal').dataset.edit = editId;
-      // ensure modal is visible by scrolling it into view
-      $('labourModal').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }).catch(()=>{ alert('Failed to fetch labour'); });
   } else {
     $('labourModalTitle').textContent = 'Add Labour';
     $('modalUserId').value=''; $('modalName').value=''; $('modalPwd').value='1234'; $('modalRate').value='500';
     $('modalPayMode').value = 'Cash';
     delete $('labourModal').dataset.edit;
-    // scroll to the modal so user immediately sees the form
-    $('labourModal').scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
 function openEditLabour(id){ openLabourModal(id); }
@@ -824,11 +891,12 @@ $('saveLabourBtn').onclick = async ()=>{
   const paymentMode = $('modalPayMode').value || 'Cash';
   if(!id||!name){ alert('Enter ID and name'); return; }
   try{
+    // Save and ensure createdAt handled in saveLabourToFirestore
     await saveLabourToFirestore({id, name, password: pwd, rate, paymentMode});
     $('labourModal').classList.add('hidden'); await renderLabourList(); await generateOwnerTable(); await populateAdvSelect(); await renderSalarySheet();
-    // after save, scroll back to top so owner dashboard is visible
-    window.scrollTo({ top: 0, behavior: 'smooth' });
     alert('Saved');
+    // scroll back to top after save
+    window.scrollTo({top:0, behavior:'smooth'});
   } catch(err){ alert('Save failed: ' + err.message); }
 };
 
