@@ -5,91 +5,72 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Labour Shift, Advance & Salary Portal (Firestore)</title>
 
-<!-- Logo: replace with your own file name or remote URL if needed.
-     If you want a favicon (tab icon), add <link rel="icon" href="logo.png"> above.
--->
+<!-- FAVICON: fallback inline SVG so logo shows even if external file missing -->
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="8" ry="8" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="55%" font-size="28" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>'>
+
 <style>
   :root{--sticky-id:100px;--sticky-name:260px}
   body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;color:#222}
   .wrap{max-width:1200px;margin:18px auto;padding:14px}
   .card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 6px 20px rgba(20,20,40,0.05)}
-  h1{margin:6px 0 12px;font-size:20px;display:flex;align-items:center;gap:12px}
+  h1{margin:6px 0 12px;font-size:20px;display:flex;align-items:center;gap:10px}
   .row{display:flex;gap:8px;flex-wrap:wrap}
   input,select,button,textarea{font-size:14px;padding:8px;border-radius:8px;border:1px solid #d6e0ef}
-  input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   button{cursor:pointer}
   .btn{background:#0b79ff;color:#fff;border:none}
   .btn-muted{background:#6c757d;color:#fff;border:none}
   .success{background:#28a745;color:#fff;border:none}
   .danger{background:#dc3545;color:#fff;border:none}
-  table{border-collapse:collapse;width:100%;font-size:13px;background:transparent}
-  th,td{border:1px solid #e8eef8;padding:6px;text-align:center;white-space:nowrap;background:rgba(255,255,255,0.95)}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid #e8eef8;padding:6px;text-align:center;white-space:nowrap}
   th{background:#f3f8ff}
   .small{font-size:12px;color:#555}
   .muted{color:#666}
   .hidden{display:none}
-  .table-wrap{overflow:auto;background:#fff;padding:8px;border-radius:8px; position:relative}
-  table thead th.sticky-id, table tbody td.sticky-id{ position:sticky; left:0; background:rgba(255,255,255,0.9); z-index:4; min-width:var(--sticky-id) }
-  table thead th.sticky-name, table tbody td.sticky-name{ position:sticky; left:var(--sticky-id); background:rgba(255,255,255,0.9); z-index:3; min-width:var(--sticky-name); text-align:left; padding-left:10px }
+  .table-wrap{overflow:auto;background:#fff;padding:8px;border-radius:8px}
+  table thead th.sticky-id, table tbody td.sticky-id{ position:sticky; left:0; background:#fff; z-index:4; min-width:var(--sticky-id) }
+  table thead th.sticky-name, table tbody td.sticky-name{ position:sticky; left:var(--sticky-id); background:#fff; z-index:3; min-width:var(--sticky-name); text-align:left; padding-left:10px }
   .readonly{background:#f6f8fb}
   .left { text-align:left; padding-left:6px }
   @media (max-width:1100px){ :root{--sticky-name:160px} }
   .controls{display:flex;gap:8px;align-items:center;margin-bottom:8px}
   .search{width:260px}
-  /* logo small */
-  .logo-small{width:36px;height:36px;background-size:contain;background-repeat:no-repeat;background-position:center;display:inline-block;vertical-align:middle}
-  /* faded background image for tables and export pages */
-  .table-bg{
-    background-image: url('logo.png'); /* change to your logo path */
-    background-position: 12px 12px;
-    background-repeat: no-repeat;
-    background-size: 48px 48px;
-    opacity: 1;
+  .logo { width:36px; height:36px; border-radius:6px; object-fit:cover; }
+  .logo-large { width:48px; height:48px; border-radius:6px; object-fit:cover; }
+  .header-title { display:flex; align-items:center; gap:10px; }
+  .small-muted-note { color:#666; font-size:12px; }
+
+  /* ensure focused input appears above sticky columns so it is not hidden */
+  input:focus, textarea:focus, select:focus {
+    position: relative;
+    z-index: 9999 !important;
+    outline: 2px solid rgba(11,121,255,0.15);
   }
-  /* watermark for exported HTML (renders on exported pages) */
-  .export-watermark{
-    opacity:0.08;
-    position:absolute;
-    left:30px;
-    top:10px;
-    width:160px;
-    height:160px;
-    background-image:url('logo.png');
-    background-size:contain;
-    background-repeat:no-repeat;
-    pointer-events:none;
-  }
-  /* focus high z-index to avoid sticky columns covering inputs */
-  #ownerTableWrap input:focus, .table-wrap input:focus, .table-wrap select:focus, textarea:focus { z-index:999; position:relative; outline:2px solid rgba(11,121,255,0.2) }
-  /* small responsive tweak */
-  @media (max-width:700px){
-    .search{width:160px}
-  }
+
+  /* small tweak so clicking a cell doesn't auto-select the row behind it */
+  .attCell { background: #fff; }
+
 </style>
-
-<!-- jsPDF + html2canvas for PDF downloads -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
 </head>
 <body>
 <div class="wrap">
   <div class="card" id="homeCard">
     <h1>
-      <span class="logo-small" id="pageLogo" style="background-image:url('logo.png');"></span>
-      Owner Dashboard
+      <!-- inline SVG data URL logo (always available) -->
+      <img id="appLogo" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' alt="logo" class="logo">
+      <span>Labour Shift, Advance & Salary Portal (Firestore)</span>
     </h1>
     <div class="row">
       <button class="btn" id="ownerBtn">Owner Login</button>
       <button class="btn-muted" id="labourBtn">Labour Login</button>
       <div style="flex:1"></div>
     </div>
-    <p class="small muted">Owner must sign in to perform saves (Firestore writes). Serve this page over HTTP (localhost) for Firebase to work correctly.</p>
+    <p class="small muted">Owner must sign in to perform saves (Firestore writes).</p>
   </div>
 
-  <!-- Owner Login -->
+  <!-- Owner Login (email/password using Firebase Auth) -->
   <div class="card hidden" id="ownerLoginCard">
-    <h3>Owner Login (Firebase)</h3>
+    <h3><img id="loginLogo" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' class="logo-large" alt="logo"> Owner Login (Firebase)</h3>
     <label>Email</label><br>
     <input id="ownerEmail" type="email" placeholder="owner@example.com" autocomplete="off"><br>
     <label>Password</label><br>
@@ -101,9 +82,9 @@
     <div id="ownerAuthMsg" class="small muted" style="margin-top:8px"></div>
   </div>
 
-  <!-- Labour Login -->
+  <!-- Labour Login (ID only) -->
   <div class="card hidden" id="labourLoginCard">
-    <h3>Labour Login (ID only)</h3>
+    <h3><img src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' class="logo-large" alt="logo"> Labour Login (ID only)</h3>
     <label>User ID</label><br>
     <input id="labUserId" placeholder="L001" autocomplete="off">
     <div style="margin-top:10px">
@@ -114,9 +95,9 @@
   </div>
 
   <!-- Owner Dashboard -->
-  <div class="card hidden table-bg" id="ownerDashboard">
+  <div class="card hidden" id="ownerDashboard">
     <div style="display:flex;align-items:center;justify-content:space-between">
-      <h2>Owner Dashboard</h2>
+      <h2 style="display:flex;align-items:center;gap:10px"><img src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' class="logo" alt="logo"> Owner Dashboard</h2>
       <div><button id="ownerLogout">Sign Out</button></div>
     </div>
 
@@ -135,9 +116,7 @@
       <button id="exportShiftPDF">Export Shifts PDF</button>
     </div>
 
-    <div id="ownerTableWrap" class="table-wrap card" style="min-height:120px; position:relative">
-      <div class="export-watermark" aria-hidden="true"></div>
-    </div>
+    <div id="ownerTableWrap" class="table-wrap card"></div>
 
     <div class="card" id="advancesCard" style="margin-top:12px">
       <h3>Advances</h3>
@@ -145,7 +124,7 @@
         <label>Month</label><input type="month" id="advMonth">
         <button id="showAdv">Show</button>
         <div style="flex:1"></div>
-        <!-- new advance export buttons -->
+        <!--new advance export buttons-->
         <button id="exportAdvCSV">Export Adv CSV</button>
         <button id="exportAdvXLS">Export Adv XLS</button>
         <button id="exportAdvPDF">Export Adv PDF</button>
@@ -156,15 +135,15 @@
         </div>
         <div style="width:360px">
           <h4>Add Advance</h4>
-          <label>Search Labour</label>
-          <input id="advSearch" list="advList" placeholder="Type ID or name to search" style="width:100%" />
-          <datalist id="advList"></datalist>
 
-          <label style="margin-top:6px">Labour (selected)</label>
+          <!-- SEARCHABLE ADVANCE LABOUR INPUT -->
+          <label>Search Labour (type to filter)</label>
+          <input id="advSearch" placeholder="Search by ID or name" autocomplete="off" style="width:100%;margin-bottom:6px" />
+          <label>Labour</label>
           <select id="advLab" style="width:100%"></select>
 
           <label>Date</label><input id="advDate" type="date">
-          <label>Amount (₹)</label><input id="advAmt" type="number" min="0" step="0.1" placeholder="e.g. 12.5">
+          <label>Amount (₹)</label><input id="advAmt" type="number" min="0" step="0.01">
           <label>Note</label><textarea id="advNote" rows="3" style="width:100%"></textarea>
           <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end">
             <button class="btn" id="saveAdv">Save Advance</button>
@@ -186,12 +165,11 @@
         <button id="exportSalaryXLS">Download Salary XLS</button>
         <button id="exportSalaryPDF">Download Salary PDF</button>
       </div>
-      <div class="table-wrap" style="margin-top:10px;position:relative">
-        <div class="export-watermark" aria-hidden="true"></div>
+      <div class="table-wrap" style="margin-top:10px">
         <table id="salaryTable"><thead><tr>
           <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
           <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-          <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Signature</th>
+          <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Sign</th>
         </tr></thead><tbody></tbody></table>
       </div>
       <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
@@ -199,17 +177,13 @@
 
     <hr>
     <h3 class="small">Manage Labours</h3>
-    <div style="margin-bottom:8px">
-      <button id="fixOrder">Fix Order (save current order)</button>
-      <small class="muted"> (After reordering rows, click Fix Order to store ordering)</small>
-    </div>
     <div id="labourList"></div>
   </div>
 
   <!-- Labour Dashboard -->
   <div class="card hidden" id="labourDashboard">
     <div style="display:flex;align-items:center;justify-content:space-between">
-      <h2>Labour Portal</h2>
+      <h2><img src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' class="logo" alt="logo"> Labour Portal</h2>
       <div><button id="labourLogout">Back</button></div>
     </div>
     <div id="labourInfo"></div>
@@ -226,7 +200,7 @@
     <label>User ID</label><input id="modalUserId"><br>
     <label>Name</label><input id="modalName"><br>
     <label>Password</label><input id="modalPwd"><br>
-    <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0" step="0.1"><br>
+    <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0" step="0.01"><br>
     <!-- NEW: Payment mode -->
     <label>Payment Mode</label>
     <select id="modalPayMode" style="width:120px">
@@ -247,7 +221,7 @@
 
 <script>
 /* ---------------------------
-  Replace firebaseConfig with your project's config
+  Put your firebase config here (you gave this earlier)
 ---------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyD4Ax31xHSiW4d4j-YgwcmvH1kPc4OrUoU",
@@ -262,18 +236,22 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-/* OWNER UID — replace with your owner UID from Firebase Auth */
-const OWNER_UID = 'D0iiwtC6w9O9qImWLQUXDxKP7lc2'; // <-- replace if needed
+/* OWNER UID — set to the UID you created in Firebase Auth */
+const OWNER_UID = 'D0iiwtC6w9O9qImWLQUXDxKP7lc2'; // <-- replace with your owner UID if different
 
 /* ===== Simple DOM helper ===== */
 const $ = id => document.getElementById(id);
 
 /* ===== Navigation UI wiring ===== */
 function hideAll(){ ['ownerLoginCard','labourLoginCard','ownerDashboard','labourDashboard','labourModal'].forEach(id=>$(id).classList.add('hidden')); $('homeCard').classList.add('hidden'); }
-$('ownerBtn').onclick = ()=>{ hideAll(); $('ownerLoginCard').classList.remove('hidden'); };
-$('labourBtn').onclick = ()=>{ hideAll(); $('labourLoginCard').classList.remove('hidden'); };
+$('ownerBtn').onclick = ()=>{ hideAll(); $('ownerLoginCard').classList.remove('hidden'); scrollToTop(); };
+$('labourBtn').onclick = ()=>{ hideAll(); $('labourLoginCard').classList.remove('hidden'); scrollToTop(); };
 $('ownerBack').onclick = ()=>location.reload();
 $('labourBack').onclick = ()=>location.reload();
+
+/* quick helper for scrolling */
+function scrollToTop(){ window.scrollTo({top:0, behavior:'smooth'}); }
+function scrollToElement(el){ if(!el) return; el.scrollIntoView({behavior:'smooth', block:'center'}); }
 
 /* ===== Auth (owner sign-in) ===== */
 $('ownerLogin').onclick = async ()=>{
@@ -287,7 +265,7 @@ $('ownerLogin').onclick = async ()=>{
     if(uid !== OWNER_UID) {
       alert('Signed in UID does not match OWNER_UID variable. Update OWNER_UID in code or use the owner with that UID.');
     }
-    hideAll(); $('ownerDashboard').classList.remove('hidden'); await initOwnerView();
+    hideAll(); $('ownerDashboard').classList.remove('hidden'); await initOwnerView(); scrollToTop();
   } catch(err){
     alert('Sign in failed: ' + err.message);
   }
@@ -309,7 +287,7 @@ $('labourLoginBtn').onclick = async ()=>{
     currentLabour.id = labDoc.id;
     hideAll(); $('labourDashboard').classList.remove('hidden');
     $('labourMonth').value = (new Date()).toISOString().slice(0,7);
-    renderLabourInfo(); renderLabourView();
+    renderLabourInfo(); renderLabourView(); scrollToTop();
   } catch(err){
     alert('Error fetching labour: ' + err.message);
   }
@@ -318,17 +296,16 @@ $('labourLogout').onclick = ()=> location.reload();
 
 /* ========== Firestore helper functions ========== */
 
-/* Labours collection: doc id = labour id
-   We store createdAt timestamp so latest-added appear at the end.
-*/
+/* Labours collection: doc id = labour id */
 async function fetchAllLabours(){
-  // order by createdAt asc (oldest first). If createdAt missing, fallback to id order.
-  const snap = await db.collection('labours').orderBy('createdAt','asc').get().catch(async ()=>{
-    // older docs may not have createdAt; fallback:
-    const s = await db.collection('labours').orderBy('id').get();
-    return s;
-  });
-  return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  // try createdAt asc — newest at bottom
+  try {
+    const snap = await db.collection('labours').orderBy('createdAt','asc').get();
+    return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  } catch(e) {
+    const snap = await db.collection('labours').orderBy('id').get();
+    return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  }
 }
 async function fetchLabourById(id){
   const d = await db.collection('labours').doc(id).get();
@@ -336,7 +313,8 @@ async function fetchLabourById(id){
   return {id: d.id, ...d.data()};
 }
 async function saveLabourToFirestore(lab){
-  // lab: {id,name,password,rate,paymentMode}
+  const ref = db.collection('labours').doc(lab.id);
+  const doc = await ref.get();
   const payload = {
     name: lab.name || '',
     password: lab.password || '',
@@ -344,33 +322,26 @@ async function saveLabourToFirestore(lab){
     paymentMode: lab.paymentMode || 'Cash',
     id: lab.id
   };
-  // set createdAt if new
-  const docRef = db.collection('labours').doc(lab.id);
-  const doc = await docRef.get();
   if(!doc.exists){
     payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   }
-  await docRef.set(payload, {merge:true});
+  await ref.set(payload, {merge:true});
 }
 async function deleteLabourFromFirestore(id){
-  // Delete doc and associated attendance/advances/salaries docs (best-effort)
   await db.collection('labours').doc(id).delete();
-  // attendance docs named id_month; delete any doc with id prefix id_
   const attAll = await db.collection('attendance').get();
   const batch = db.batch();
   attAll.docs.forEach(doc => {
     if(doc.id.startsWith(id + '_')) batch.delete(doc.ref);
   });
-  // advances doc named id
-  batch.delete(db.collection('advances').doc(id));
+  const advDoc = db.collection('advances').doc(id);
+  batch.delete(advDoc);
   const salAll = await db.collection('salaries').get();
   salAll.docs.forEach(doc => { if(doc.id.startsWith(id + '_')) batch.delete(doc.ref); });
   await batch.commit();
 }
 
-/* Attendance docs: id = `${labId}_${month}` with { shifts: { day: num }, rate }
-   Example doc id: "L001_2025-12"
-*/
+/* Attendance docs: id = `${labId}_${month}` */
 async function fetchAttendance(labId, month){
   const id = `${labId}_${month}`;
   const d = await db.collection('attendance').doc(id).get();
@@ -384,18 +355,17 @@ async function saveAttendanceForMonth(attObjMap){
   await batch.commit();
 }
 
-/* Advances docs: id = labour id, structure: { items: [ {date, amount, note} ] } */
+/* Advances docs */
 async function fetchAdvancesForLab(labId){
   const d = await db.collection('advances').doc(labId).get();
   return d.exists ? (d.data().items || []) : [];
 }
 async function appendAdvanceForLab(labId, advanceItem){
-  // advanceItem: {date, amount, note}
   const ref = db.collection('advances').doc(labId);
   await ref.set({ items: firebase.firestore.FieldValue.arrayUnion(advanceItem) }, {merge:true});
 }
 
-/* Salaries docs: id = `${labId}_${month}` with salary fields */
+/* Salaries docs */
 async function fetchSalary(labId, month){
   const id = `${labId}_${month}`;
   const d = await db.collection('salaries').doc(id).get();
@@ -406,8 +376,22 @@ async function saveSalaryRecord(labId, month, payload){
   await db.collection('salaries').doc(id).set(payload, {merge:true});
 }
 
-/* ===== UI functions that use Firestore ===== */
+/* Helper: collect all attendance docs for a month (for owner table export) */
+async function collectAttendanceForMonth(month){
+  const labs = await fetchAllLabours();
+  const rows = [];
+  for(const [i,l] of labs.entries()){
+    const key = `${l.id}_${month}`;
+    const doc = await db.collection('attendance').doc(key).get();
+    const rec = doc.exists ? doc.data() : {shifts:{}};
+    rows.push({ sno: i+1, id: l.id, name: l.name, shifts: rec.shifts || {}, rate: rec.rate || l.rate });
+  }
+  return { rows, labs };
+}
 
+/* ========== UI functions that use Firestore ========== */
+
+/* Init owner view: fetch labours to render */
 async function initOwnerView(){
   $('ownerMonth').value = (new Date()).toISOString().slice(0,7);
   $('advMonth').value = $('ownerMonth').value;
@@ -419,7 +403,7 @@ async function initOwnerView(){
   await renderSalarySheet();
 }
 
-/* Generate owner attendance table */
+/* Generate owner attendance table (pulls attendance docs from Firestore) */
 async function generateOwnerTable(){
   const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; }
   const days = getDays(month);
@@ -436,26 +420,32 @@ async function generateOwnerTable(){
   labs.forEach((l,i)=>{
     const rec = attMap[l.id] || {shifts:{}, rate:l.rate};
     let total = 0;
-    html += `<tr data-id="${l.id}" data-row="${i}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
-    days.forEach(d=>{
-      const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0;
-      total += Number(v)||0;
-      // step="0.1" to allow decimals; onchange/blur will normalize
-      html += `<td><input type="number" step="0.1" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:68px"></td>`;
-    });
-    html += `<td class="rowTotal">${total}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}','${month}')">View</button></td></tr>`;
+    html += `<tr data-id="${l.id}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
+    days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; html += `<td><input type="number" step="0.25" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:78px"></td>`;});
+    html += `<td class="rowTotal">${Number(total).toFixed(2)}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}','${month}')">View</button></td></tr>`;
   });
   html += '</tbody></table>';
   $('ownerTableWrap').innerHTML = html;
-  // fill input behaviors
-  document.querySelectorAll('.attCell').forEach(i=>{
-    // auto select text on focus
-    i.addEventListener('focus', e => { try{ e.target.select(); }catch(e){} });
-    // allow decimals with '.' and arrow navigation
-    i.addEventListener('keydown', attCellKeyHandler);
-    // on input, update totals
-    i.addEventListener('input', ()=>{ updateRowTotals(); ownerFilter(); });
+
+  // add behavior: auto-select text on focus & arrow navigation & ensure focused input sits above sticky columns
+  document.querySelectorAll('.attCell').forEach((el) => {
+    // auto select on focus (works for mouse and tab)
+    el.addEventListener('focus', (ev) => {
+      try { ev.target.select(); } catch(e) {}
+      // ensure z-index while focused so sticky name doesn't cover it
+      ev.target.style.zIndex = '9999';
+    });
+    el.addEventListener('blur', (ev) => {
+      ev.target.style.zIndex = '';
+    });
+
+    // allow decimal by keeping step - already set, but ensure input type allows '.' on locales
+    el.addEventListener('keydown', attCellKeyHandler);
+
+    // update totals on change/input
+    el.addEventListener('input', () => { updateRowTotals(); ownerFilter(); });
   });
+
   updateRowTotals();
 }
 $('loadTable').onclick = generateOwnerTable;
@@ -489,7 +479,7 @@ $('saveAll').onclick = async ()=>{
   }
 };
 
-/* Search */
+/* Owner search */
 function ownerFilter(){
   const q = $('ownerSearch').value.trim().toLowerCase();
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
@@ -501,21 +491,23 @@ function ownerFilter(){
 /* Advances UI */
 async function populateAdvSelect(){
   const sel = $('advLab'); sel.innerHTML = '';
-  const dl = $('advList'); dl.innerHTML = '';
   const labs = await fetchAllLabours();
   labs.forEach(l => {
     const o = document.createElement('option'); o.value = l.id; o.textContent = l.id + ' - ' + l.name; sel.appendChild(o);
-    // for datalist search
-    const d = document.createElement('option'); d.value = `${l.id} - ${l.name}`; dl.appendChild(d);
   });
-  // when advSearch changes, set advLab accordingly
-  $('advSearch').oninput = function(){
-    const v = this.value.trim();
-    if(!v) return;
-    const match = labs.find(x => `${x.id} - ${x.name}`.toLowerCase().startsWith(v.toLowerCase()) || x.id.toLowerCase() === v.toLowerCase());
-    if(match) $('advLab').value = match.id;
+
+  // wire searchable advSearch input
+  const advSearch = $('advSearch');
+  advSearch.oninput = function() {
+    const q = this.value.trim().toLowerCase();
+    // find first match by id or name startsWith or includes
+    const found = labs.find(x => (x.id && x.id.toLowerCase().startsWith(q)) || (x.name && x.name.toLowerCase().includes(q)));
+    if(found) {
+      $('advLab').value = found.id;
+    }
   };
 }
+
 $('showAdv').onclick = renderAdvances;
 
 async function renderAdvances(){
@@ -541,7 +533,7 @@ $('saveAdv').onclick = async ()=>{
   if(!lab || !date || amt <= 0){ alert('Select labour, date and amount'); return; }
   try{
     await appendAdvanceForLab(lab, {date, amount: amt, note});
-    // scroll back to top after save
+    // after save, scroll to top (as you requested earlier)
     window.scrollTo({top:0, behavior:'smooth'});
     $('advDate').value=''; $('advAmt').value=''; $('advNote').value='';
     await renderAdvances(); await renderSalarySheet();
@@ -551,9 +543,9 @@ $('saveAdv').onclick = async ()=>{
   }
 };
 $('clearAdv').onclick = ()=>{ $('advDate').value=''; $('advAmt').value=''; $('advNote').value=''; };
-function prefillAdv(id){ $('advLab').value = id; $('advDate').value = (new Date()).toISOString().slice(0,10); $('advAmt').focus(); window.scrollTo({top:document.getElementById('advancesCard').offsetTop - 20, behavior:'smooth'}); }
+function prefillAdv(id){ $('advLab').value = id; $('advDate').value = (new Date()).toISOString().slice(0,10); $('advAmt').focus(); scrollToElement($('advancesCard')); }
 
-/* View advances (open page HTML then download via jsPDF if requested) */
+/* View advances (open in new tab) */
 async function viewAdvances(id, month){
   const items = await fetchAdvancesForLab(id);
   let list = items;
@@ -595,23 +587,23 @@ async function renderSalarySheet(){
     const paymentMode = saved.paymentMode || l.paymentMode || 'Cash';
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>
-      <td><input class="sal-amt" data-id="${l.id}" value="${amtPerShift}" style="width:90px" step="0.1" type="number"></td>
+      <td><input class="sal-amt" data-id="${l.id}" value="${amtPerShift}" style="width:90px" step="0.01" type="number"></td>
       <td><input class="sal-totalShift readonly" data-id="${l.id}" value="${totalShift}" readonly style="width:90px"></td>
       <td><input class="sal-totalAmt readonly" data-id="${l.id}" value="${totalAmt}" readonly style="width:110px"></td>
       <td><input class="sal-monthlyAdvance readonly" data-id="${l.id}" value="${monthlyAdvance}" readonly style="width:110px"></td>
-      <td><input class="sal-mess" data-id="${l.id}" value="${mess}" style="width:90px" step="0.1" type="number"></td>
-      <td><input class="sal-uf" data-id="${l.id}" value="${uf}" style="width:90px" step="0.1" type="number"></td>
-      <td><input class="sal-pf" data-id="${l.id}" value="${pf}" style="width:90px" step="0.1" type="number"></td>
-      <td><input class="sal-debit" data-id="${l.id}" value="${debit}" style="width:90px" step="0.1" type="number"></td>
-      <td><input class="sal-jvc" data-id="${l.id}" value="${jvc}" style="width:90px" step="0.1" type="number"></td>
-      <td><input class="sal-other" data-id="${l.id}" value="${other}" style="width:90px" step="0.1" type="number"></td>
+      <td><input class="sal-mess" data-id="${l.id}" value="${mess}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-uf" data-id="${l.id}" value="${uf}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-pf" data-id="${l.id}" value="${pf}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-debit" data-id="${l.id}" value="${debit}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-jvc" data-id="${l.id}" value="${jvc}" style="width:90px" step="0.01" type="number"></td>
+      <td><input class="sal-other" data-id="${l.id}" value="${other}" style="width:90px" step="0.01" type="number"></td>
       <td>
         <select class="sal-paymode" data-id="${l.id}" style="width:100px">
           <option value="Cash"${paymentMode === 'Cash' ? ' selected' : ''}>Cash</option>
           <option value="A/c"${paymentMode === 'A/c' ? ' selected' : ''}>A/c</option>
         </select>
       </td>
-      <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px" step="0.1" type="number"></td>
+      <td><input class="sal-paid" data-id="${l.id}" value="${paid}" style="width:110px" step="0.01" type="number"></td>
       <td><input class="sal-remarks" data-id="${l.id}" value="${saved.remarks || ''}" style="width:160px"></td>`;
     tbody.appendChild(tr);
   }
@@ -637,7 +629,6 @@ function salaryInputsChanged(e){
   const deductions = Number((monthlyAdvance + mess + uf + pf + debit + jvc + other).toFixed(2));
   const calcPaid = Number((totalAmt - deductions).toFixed(2));
   const paidInput = row.querySelector('.sal-paid');
-  // Only auto-update paid if user didn't override: we will always set to calcPaid for ease (owner can edit and save)
   paidInput.value = calcPaid;
 }
 
@@ -672,9 +663,7 @@ $('saveSalary').onclick = async ()=>{
   }
 };
 
-/* Export helpers (attendance/salary/adv) */
-
-// collect shift rows
+/* Export helpers (collect attendance/salary/adv) */
 async function collectShiftRows(month){
   const labs = await fetchAllLabours();
   const rows = [];
@@ -683,7 +672,7 @@ async function collectShiftRows(month){
     const doc = await db.collection('attendance').doc(key).get();
     const rec = doc.exists ? doc.data() : {shifts:{}};
     const days = getDays(month);
-    const dayVals = [];
+    const dayVals = [], total=0;
     let tot=0;
     for(const d of days){ const v = Number(rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0) || 0; dayVals.push(v); tot += v; }
     rows.push({sno:i+1, id:l.id, name:l.name, days: dayVals, total: tot});
@@ -692,12 +681,9 @@ async function collectShiftRows(month){
 }
 async function exportShiftCSV(){ const month = $('ownerMonth').value; if(!month){ alert('Select month'); return; } const data=await collectShiftRows(month); const header=['S.No','User ID','Name', ...data.days.map(String), 'Total']; const csv=[header.join(',')].concat(data.rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, ...r.days, r.total].join(','))).join('\n'); downloadBlob(csv, `shifts_${month}.csv`, 'text/csv'); }
 async function exportShiftXLS(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; data.rows.forEach(r=>{ html+='<tr>'; html+=`<td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td>` + r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`;}); html+='</table>'; downloadBlob('\uFEFF'+html, `shifts_${month}.xls`, 'application/vnd.ms-excel'); }
-async function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); // build html and use html2canvas+jspdf to generate file
-  const html = buildExportHtml(`Shift sheet — ${month}`, ['S.No','User ID','Name',...data.days.map(String),'Total'], data.rows.map(r=> [r.sno, r.id, r.name, ...r.days, r.total]));
-  await downloadHtmlAsPdf(html, `shifts_${month}.pdf`);
-}
+async function exportShiftPDF(){ const month=$('ownerMonth').value; if(!month){alert('Select month');return;} const data=await collectShiftRows(month); let html=`<html><head><meta charset="utf-8"><title>Shift sheet ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Shift sheet — ${month}</h2><table><thead><tr>`+ ['S.No','User ID','Name',...data.days.map(String),'Total'].map(h=>`<th>${h}</th>`).join('')+`</tr></thead><tbody>`; data.rows.forEach(r=>{ html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td>`+ r.days.map(d=>`<td>${d}</td>`).join('') + `<td>${r.total}</td></tr>`; }); html+='</tbody></table></body></html>'; const w=window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
-/* COLLECT SALARY ROWS (with paymentMode) */
+/* Salary export helpers */
 async function collectSalaryRows(month){
   const labs = await fetchAllLabours(); const rows = [];
   for(const [i,l] of labs.entries()){
@@ -718,21 +704,51 @@ async function collectSalaryRows(month){
 async function exportSalaryCSV(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); const header=['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary']; const csv=[header.join(',')].concat(rows.map(r=> [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, `"${r.paymentMode}"`, r.paid].join(','))).join('\n'); downloadBlob(csv, `salary_${month}.csv`, 'text/csv'); }
 async function exportSalaryXLS(){ const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;} const rows=await collectSalaryRows(month); let html='<table border="1"><tr>'+['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].map(h=>`<th>${h}</th>`).join('')+'</tr>'; rows.forEach(r=> html+=`<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`); html += '</table>'; downloadBlob('\uFEFF'+html, `salary_${month}.xls`, 'application/vnd.ms-excel'); }
 
-/* Export salary PDF (A/c first, then Cash) */
+/* UPDATED: exportSalaryPDF — ensure S.No starts from 1 for each Payment Mode group (A/c then Cash) */
 async function exportSalaryPDF(){
-  const month=$('salaryMonth').value || $('ownerMonth').value; if(!month){alert('Select month');return;}
-  const rows=await collectSalaryRows(month);
-  // split ac and cash
-  const acRows = rows.filter(r => (r.paymentMode||'').toString().toLowerCase().includes('a/c'));
-  const cashRows = rows.filter(r => !(r.paymentMode||'').toString().toLowerCase().includes('a/c'));
-  const htmlA = buildExportHtml(`Salary - ${month} (A/c)`, ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'], acRows.map(r => [r.sno, r.id, r.name, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, r.paymentMode, r.paid]));
-  const htmlC = buildExportHtml(`Salary - ${month} (Cash)`, ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'], cashRows.map(r => [r.sno, r.id, r.name, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, r.paymentMode, r.paid]));
-  // combine both exports into one PDF (ac first)
-  const combinedHtml = `<div>${htmlA}</div><div style="page-break-before:always">${htmlC}</div>`;
-  await downloadHtmlAsPdf(combinedHtml, `salary_${month}.pdf`);
+  const month = $('salaryMonth').value || $('ownerMonth').value;
+  if(!month){ alert('Select month'); return; }
+  const rows = await collectSalaryRows(month);
+  // partition rows into A/c and Cash
+  const acRows = rows.filter(r => (r.paymentMode || '').toLowerCase().includes('a/c'));
+  const cashRows = rows.filter(r => !(r.paymentMode || '').toLowerCase().includes('a/c'));
+  // renumber each group starting from 1
+  const renumber = (arr) => arr.map((r, idx) => ({ ...r, sno: idx + 1 }));
+  const acRen = renumber(acRows);
+  const cashRen = renumber(cashRows);
+
+  // build HTML for both tables
+  function tableHtml(title, arr){
+    let html = `<h3 style="margin-bottom:6px">${title}</h3><table><thead><tr>`;
+    ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary'].forEach(h => html += `<th>${h}</th>`);
+    html += `</tr></thead><tbody>`;
+    arr.forEach(r => {
+      html += `<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paid}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  const head = `<html><head><meta charset="utf-8"><title>Salary ${month}</title><style>
+    body{font-family:Arial,Helvetica,sans-serif;color:#222;padding:18px}
+    table{border-collapse:collapse;width:100%;margin-bottom:18px}
+    th,td{border:1px solid #333;padding:6px;text-align:center;font-size:12px}
+    th{background:#eee}
+    td.left{text-align:left;padding-left:6px}
+    h2{margin-bottom:6px}
+    .watermark{opacity:0.06;position:fixed;left:40px;top:20px;width:220px;height:220px;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx=\"12\" ry=\"12\" width=\"100%\" height=\"100%\" fill=\"%23ffffff\"/><text x=\"50%\" y=\"56%\" font-size=\"36\" font-family=\"Arial\" font-weight=\"700\" text-anchor=\"middle\" fill=\"%23a2242a\">VF</text></svg>');background-size:contain;background-repeat:no-repeat}
+    @media print{ table{page-break-inside:auto} tr{page-break-inside:avoid;page-break-after:auto} }
+    </style></head><body><div class="watermark"></div><h2>Salary sheet — ${month}</h2>`;
+
+  const combinedHtml = head + tableHtml('Payment Mode: A/c', acRen) + '<div style="height:24px"></div>' + tableHtml('Payment Mode: Cash', cashRen) + '</body></html>';
+
+  // open in new tab so user may print or save from browser (as you prefer not to use html2canvas/jsPDF)
+  const w = window.open('', '_blank');
+  w.document.write(combinedHtml);
+  w.document.close();
 }
 
-/* Advances export functions */
+/* ===== ADVANCES export functions (unchanged behavior) ===== */
 async function collectAdvForMonth(month){
   const labs = await fetchAllLabours();
   const rows = [];
@@ -747,107 +763,19 @@ async function collectAdvForMonth(month){
 }
 async function exportAdvCSV(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); const header = ['S.No','User ID','Name','Date','Amount','Note']; const csv = [header.join(',')].concat(rows.map(r => [r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.date, r.amount, `"${(r.note||'').replace(/"/g,'""')}"`].join(','))).join('\n'); downloadBlob(csv, `advances_${month}.csv`, 'text/csv'); }
 async function exportAdvXLS(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); let html = '<table border="1"><tr>' + ['S.No','User ID','Name','Date','Amount','Note'].map(h=>`<th>${h}</th>`).join('') + '</tr>'; rows.forEach(r => { html += `<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.date}</td><td>${r.amount}</td><td>${r.note}</td></tr>`; }); html += '</table>'; downloadBlob('\uFEFF'+html, `advances_${month}.xls`, 'application/vnd.ms-excel'); }
-async function exportAdvPDF(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); const html = buildExportHtml(`Advances — ${month}`, ['S.No','User ID','Name','Date','Amount','Note'], rows.map(r=> [r.sno, r.id, r.name, r.date, r.amount, r.note])); await downloadHtmlAsPdf(html, `advances_${month}.pdf`); }
+async function exportAdvPDF(){ const month = $('advMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; } const rows = await collectAdvForMonth(month); let html = `<html><head><meta charset="utf-8"><title>Advances ${month}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}td.left{text-align:left;padding-left:6px}</style></head><body><h2>Advances — ${month}</h2>`; if(rows.length === 0){ html += '<p>No advances for selected month.</p>'; } else { html += '<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>'; rows.forEach(r => { html += `<tr><td>${r.sno}</td><td>${r.id}</td><td class="left">${r.name}</td><td>${r.date}</td><td style="text-align:right">${r.amount}</td><td class="left">${r.note}</td></tr>`; }); html += '</tbody></table>'; const total = rows.reduce((s,x)=> s + (Number(x.amount)||0), 0); html += `<p><strong>Total Advances: ₹${total}</strong></p>`; } html += '</body></html>'; const w = window.open('', '_blank'); w.document.write(html); w.document.close(); }
 
-/* utility: build HTML table string for export pages (includes watermark) */
-function buildExportHtml(title, headers, rows){
-  let html = `<html><head><meta charset="utf-8"><title>${title}</title><style>
-    body{font-family:Arial,Helvetica,sans-serif;color:#222;padding:18px}
-    h2{margin-bottom:6px}
-    table{border-collapse:collapse;width:100%;margin-top:8px}
-    th,td{border:1px solid #333;padding:6px;text-align:center;font-size:12px}
-    th{background:#eee}
-    td.left{text-align:left;padding-left:6px}
-    .watermark{opacity:0.06;position:fixed;left:40px;top:20px;width:220px;height:220px;background-image:url('logo.png');background-size:contain;background-repeat:no-repeat}
-    @media print{ table{page-break-inside:auto} tr{page-break-inside:avoid;page-break-after:auto} }
-    </style></head><body><div class="watermark"></div><h2>${title}</h2><table><thead><tr>`;
-  headers.forEach(h=> html += `<th>${h}</th>`);
-  html += `</tr></thead><tbody>`;
-  rows.forEach(r => {
-    html += '<tr>';
-    r.forEach((c,ci) => {
-      const content = (typeof c === 'string') ? c.replace(/</g,'&lt;') : c;
-      html += (ci===2 ? `<td class="left">${content}</td>` : `<td>${content}</td>`);
-    });
-    html += '</tr>';
-  });
-  html += '</tbody></table></body></html>';
-  return html;
-}
-
-/* generate PDF from HTML string using html2canvas + jsPDF and download */
-async function downloadHtmlAsPdf(htmlString, filename){
-  // create hidden container
-  const container = document.createElement('div');
-  container.style.width = '1200px';
-  container.style.position = 'fixed';
-  container.style.left = '-9999px';
-  container.innerHTML = htmlString;
-  document.body.appendChild(container);
-  // give browser a moment to render
-  await new Promise(r => setTimeout(r, 350));
-  // capture
-  const canvas = await html2canvas(container, { scale:2, useCORS:true, allowTaint:false });
-  const imgData = canvas.toDataURL('image/jpeg', 0.95);
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
-  pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
-  pdf.save(filename);
-  container.remove();
-}
-
-/* download blob helper */
-function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
-
-/* ===== Labour management (owner-only) ===== */
+/* ===== labour management (owner-only) ===== */
 async function renderLabourList(){
   const labs = await fetchAllLabours();
-  // Render list in recorded order (createdAt asc) — last added will appear last
   let html='<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Payment Mode</th><th>Actions</th></tr></thead><tbody>';
-  labs.forEach((l,i)=> html += `<tr draggable="true"><td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td>${l.paymentMode || 'Cash'}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`);
+  labs.forEach((l,i)=> html += `<tr><td>${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${l.rate}</td><td>${l.paymentMode || 'Cash'}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`);
   html += '</tbody></table>';
   $('labourList').innerHTML = html;
-
-  // simple drag & drop reorder for visual ordering (owner can click Fix Order to persist new order)
-  const table = $('labourList').querySelector('table');
-  enableDragToReorder(table);
 }
-$('addLabour').onclick = ()=> { openLabourModal(); window.scrollTo({top:document.getElementById('labourModal').offsetTop - 10, behavior:'smooth'}); };
+$('addLabour').onclick = ()=> openLabourModal();
 
-function enableDragToReorder(table){
-  if(!table) return;
-  let dragSrc = null;
-  table.querySelectorAll('tbody tr').forEach(tr=>{
-    tr.addEventListener('dragstart', e => { dragSrc = tr; tr.style.opacity='0.4'; });
-    tr.addEventListener('dragend', e => { tr.style.opacity='1'; });
-    tr.addEventListener('dragover', e => { e.preventDefault(); });
-    tr.addEventListener('drop', e => {
-      e.preventDefault();
-      if(dragSrc && dragSrc !== tr){
-        const tbody = table.querySelector('tbody');
-        tbody.insertBefore(dragSrc, tr.nextSibling);
-      }
-    });
-  });
-}
-
-/* Fix Order: write 'order' field to labours collection based on current table order */
-$('fixOrder').onclick = async ()=>{
-  if(!isOwnerSignedIn()){ alert('Owner sign-in required'); return; }
-  const rows = Array.from(document.querySelectorAll('#labourList table tbody tr'));
-  if(!rows.length) return alert('No labours to fix order.');
-  try{
-    const batch = db.batch();
-    for(let i=0;i<rows.length;i++){
-      const id = rows[i].cells[1].textContent.trim();
-      batch.set(db.collection('labours').doc(id), { order: i+1, createdAt: firebase.firestore.FieldValue.serverTimestamp() }, {merge:true});
-    }
-    await batch.commit();
-    alert('Order saved.');
-    await renderLabourList();
-  } catch(err){ alert('Failed to save order: ' + err.message); }
-};
-
+/* modal */
 function openLabourModal(editId){
   $('labourModal').classList.remove('hidden');
   if(editId){
@@ -856,18 +784,18 @@ function openLabourModal(editId){
       $('modalUserId').value = lab.id; $('modalName').value = lab.name; $('modalPwd').value = lab.password; $('modalRate').value = lab.rate;
       $('modalPayMode').value = lab.paymentMode || 'Cash';
       $('labourModal').dataset.edit = editId;
-      window.scrollTo({top:document.getElementById('labourModal').offsetTop - 10, behavior:'smooth'});
+      scrollToElement($('labourModal'));
     }).catch(()=>{ alert('Failed to fetch labour'); });
   } else {
     $('labourModalTitle').textContent = 'Add Labour';
     $('modalUserId').value=''; $('modalName').value=''; $('modalPwd').value='1234'; $('modalRate').value='500';
     $('modalPayMode').value = 'Cash';
     delete $('labourModal').dataset.edit;
-    window.scrollTo({top:document.getElementById('labourModal').offsetTop - 10, behavior:'smooth'});
+    scrollToElement($('labourModal'));
   }
 }
 function openEditLabour(id){ openLabourModal(id); }
-$('cancelLabourBtn').onclick = ()=> { $('labourModal').classList.add('hidden'); window.scrollTo({top:0, behavior:'smooth'}); };
+$('cancelLabourBtn').onclick = ()=> { $('labourModal').classList.add('hidden'); scrollToTop(); };
 
 $('saveLabourBtn').onclick = async ()=>{
   if(!isOwnerSignedIn()){ alert('Owner sign-in required'); return; }
@@ -877,8 +805,8 @@ $('saveLabourBtn').onclick = async ()=>{
   try{
     await saveLabourToFirestore({id, name, password: pwd, rate, paymentMode});
     $('labourModal').classList.add('hidden'); await renderLabourList(); await generateOwnerTable(); await populateAdvSelect(); await renderSalarySheet();
-    window.scrollTo({top:0, behavior:'smooth'});
     alert('Saved');
+    scrollToTop();
   } catch(err){ alert('Save failed: ' + err.message); }
 };
 
@@ -949,17 +877,15 @@ auth.onAuthStateChanged(user => {
 /* ===== Utility functions ===== */
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
 function getDays(monthStr){ const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m); const arr=[]; for(let d=1; d<=n; d++) arr.push(d); return arr; }
-function getRateForLabour(id){ // attempt to read from currently rendered table or from list
-  const row = document.querySelector(`#salaryTable .sal-amt[data-id="${id}"]`);
-  if(row) return Number(row.value) || 0;
-  const labRow = Array.from(document.querySelectorAll('#labourList table tbody tr')).find(r => r.cells[1].textContent === id);
-  if(labRow) return Number(labRow.cells[3].textContent.replace('₹','').trim()) || 0;
-  return 0;
-}
+function getRateForLabour(id){ return 0; }
 
-/* Arrow key navigation for attendance cells */
+/* Arrow key handler for attendance cells:
+   - Arrow left/right moves within same row
+   - Arrow up/down moves to same column previous/next row
+*/
 function attCellKeyHandler(e){
   const el = e.target;
+  if(!el.classList.contains('attCell')) return;
   const tr = el.closest('tr');
   if(!tr) return;
   const cells = Array.from(tr.querySelectorAll('.attCell'));
@@ -967,7 +893,6 @@ function attCellKeyHandler(e){
   if(e.key === 'ArrowRight'){ e.preventDefault(); if(idx < cells.length -1) cells[idx+1].focus(); }
   else if(e.key === 'ArrowLeft'){ e.preventDefault(); if(idx > 0) cells[idx-1].focus(); }
   else if(e.key === 'ArrowDown'){ e.preventDefault();
-    // move to same column in next row if exists
     const rows = Array.from(document.querySelectorAll('#ownerTable tbody tr'));
     const rIdx = rows.indexOf(tr);
     if(rIdx < rows.length -1){
@@ -985,15 +910,13 @@ function attCellKeyHandler(e){
   }
 }
 
-/* ===== On load initial rendering: fetch labours to show in lists where possible ===== */
-window.addEventListener('load', async ()=>{
-  try{
-    await renderLabourList();
-    await populateAdvSelect();
-  }catch(e){ console.warn('Init load: ', e.message); }
-});
+/* utility to download files */
+function downloadBlob(content, filename, mime){ const blob = new Blob([content], {type:mime}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
-/* ===== Wire export buttons ===== */
+/* init on load */
+window.addEventListener('load', async ()=>{ try{ await renderLabourList(); await populateAdvSelect(); }catch(e){ console.warn('Init load: ', e.message); } });
+
+/* wire export buttons */
 $('exportShiftCSV').onclick = exportShiftCSV;
 $('exportShiftXLS').onclick = exportShiftXLS;
 $('exportShiftPDF').onclick = exportShiftPDF;
@@ -1003,10 +926,6 @@ $('exportSalaryPDF').onclick = exportSalaryPDF;
 $('exportAdvCSV').onclick = exportAdvCSV;
 $('exportAdvXLS').onclick = exportAdvXLS;
 $('exportAdvPDF').onclick = exportAdvPDF;
-
-/* If you open file via file:// the Firebase auth may not work.
-   Serve via HTTP (http://localhost:8000/yourfile.html) for full functionality.
-*/
 
 </script>
 </body>
