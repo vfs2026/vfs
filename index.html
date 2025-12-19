@@ -1261,49 +1261,38 @@ URL.revokeObjectURL(url);
 
 
 /* Salary Data Collection Function (IMPLEMENTED) */
+/* Salary Data Collection Function (READ FROM SCREEN – FIXED) */
 async function collectSalaryForMonth(month){
-  const labs = await fetchAllLabours();
-  const salaryRows = [];
+  const rows = [];
+  const trs = document.querySelectorAll('#salaryTable tbody tr');
 
-  for(let i=0;i<labs.length;i++){
-    const l = labs[i];
-    const att = await fetchAttendance(l.id, month);
-    const totalShift = Object.values(att.shifts || {}).reduce((s,v)=> s + (Number(v)||0), 0);
-    const advItems = await fetchAdvancesForLab(l.id);
-    const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
-    const saved = await fetchSalary(l.id, month) || {};
-    
-    // Use saved data if present, otherwise calculate
-    const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (att.rate || l.rate)) || Number(l.rate||0);
-    const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0);
-    const debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
-    const monthlyAdvance = Number(advTotal || 0);
+  trs.forEach((tr, i) => {
+    const nameCell = tr.querySelector('.sticky-name')?.textContent || '';
+    const parts = nameCell.split(' - ');
 
-    const totalAmt = Number((amtPerShift * totalShift));
-    const deductions = monthlyAdvance + mess + uf + pf + debit + jvc + other;
-    const paid = saved.paid !== undefined ? Number(saved.paid) : Number(totalAmt - deductions); // Use saved 'paid' if it exists, otherwise calculate
-
-    salaryRows.push({
-      sno: i+1,
-      id: l.id,
-      name: l.name,
-      amtPerShift: Number(amtPerShift).toFixed(2),
-      totalShift: Number(totalShift).toFixed(2),
-      totalAmt: Number(totalAmt).toFixed(2),
-      monthlyAdvance: Number(monthlyAdvance).toFixed(2),
-      mess: Number(mess).toFixed(2),
-      uf: Number(uf).toFixed(2),
-      pf: Number(pf).toFixed(2),
-      debit: Number(debit).toFixed(2),
-      jvc: Number(jvc).toFixed(2),
-      other: Number(other).toFixed(2),
-      paymentMode: saved.paymentMode || l.paymentMode || 'Cash',
-      paidSalary: Number(paid).toFixed(2),
-      remarks: saved.remarks || ''
+    rows.push({
+      sno: i + 1,
+      id: tr.querySelector('.sal-amt')?.dataset.id || '',
+      name: parts[1] || '',
+      amtPerShift: tr.querySelector('.sal-amt').value,
+      totalShift: tr.querySelector('.sal-totalShift').value,
+      totalAmt: tr.querySelector('.sal-totalAmt').value,
+      monthlyAdvance: tr.querySelector('.sal-monthlyAdvance').value,
+      mess: tr.querySelector('.sal-mess').value,
+      uf: tr.querySelector('.sal-uf').value,
+      pf: tr.querySelector('.sal-pf').value,
+      debit: tr.querySelector('.sal-debit').value,
+      jvc: tr.querySelector('.sal-jvc').value,
+      other: tr.querySelector('.sal-other').value,
+      paymentMode: tr.children[13].querySelector('input').value,
+      paidSalary: tr.querySelector('.sal-paid').value,
+      remarks: tr.querySelector('.sal-remarks').value
     });
-  }
-  return salaryRows;
+  });
+
+  return rows;
 }
+
 
 /* Salary Export Functions (IMPLEMENTED) */
 async function exportSalaryCSV(){
@@ -1992,7 +1981,6 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
