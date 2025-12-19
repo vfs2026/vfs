@@ -218,6 +218,18 @@
         <div id="ownerTableWrap" class="table-wrap card"></div>
     </div>
 
+<label style="margin-left:8px">
+  <input type="checkbox" id="useCustomDate">
+  Use Date
+</label>
+
+<input type="number"
+       id="jumpDate"
+       min="1"
+       max="31"
+       value="1"
+       style="width:60px"
+       title="Date to jump (1–31)">
 
     <div id="advancesTabContent" class="tab-content card hidden">
         <div class="card" id="advancesCard" style="margin-top:0">
@@ -1935,6 +1947,46 @@ function ownerFilter(){
   });
 }
 
+// ===== ENTER in Attendance search → jump to date cell =====
+document.getElementById('ownerSearch').addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter') return;
+
+  e.preventDefault();
+
+  // 🔹 Choose which date column to jump to
+  // OPTION A: always jump to TODAY
+const useCustom = document.getElementById('useCustomDate').checked;
+const jumpDateInput = document.getElementById('jumpDate');
+
+let targetDate;
+
+if (useCustom && jumpDateInput && jumpDateInput.value) {
+  targetDate = Number(jumpDateInput.value);
+} else {
+  targetDate = new Date().getDate(); // default: today
+}
+
+
+  // OPTION B (fixed date) – uncomment if you want
+  // const today = 1;
+
+  // Find first visible (filtered) row
+  const rows = Array.from(document.querySelectorAll('#ownerTable tbody tr'))
+    .filter(r => r.style.display !== 'none');
+
+  if (!rows.length) return;
+
+  const row = rows[0];
+
+  // Find the attendance cell for the selected date
+  const targetCell = row.querySelector(`.attCell[data-day="${targetDate}"]`);
+
+
+  if (targetCell) {
+    targetCell.focus();
+    setTimeout(() => targetCell.select(), 0);
+  }
+});
 
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
