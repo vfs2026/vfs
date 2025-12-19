@@ -1343,41 +1343,76 @@ const orderedRows = [...acRows, ...cashRows];
   let html = `
   <div id="pdfRoot" style="font-family:Arial">
     <style>
-    <style>
-  @page {
-    size: A4 landscape;
-    margin: 8mm;
-  }
+<style>
+@page {
+  size: A4 landscape;
+  margin: 0;              /* 🔑 REMOVE browser margins */
+}
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;   /* 🔑 VERY IMPORTANT */
-    font-size: 9px;
-  }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+}
 
-  th, td {
-    border: 1px solid #333;
-    padding: 3px;
-    text-align: center;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
+/* WRAPPER TO CONTROL POSITION */
+.page {
+  width: 297mm;           /* A4 landscape width */
+  height: 210mm;          /* A4 landscape height */
+  padding: 4mm 2mm 2mm 2mm;  /* top right bottom left */
+  box-sizing: border-box;
+}
 
-  /* COLUMN WIDTH CONTROL */
-  th:nth-child(1), td:nth-child(1) { width: 30px; }   /* S.No */
-  th:nth-child(2), td:nth-child(2) { width: 50px; }   /* ID */
-  th:nth-child(3), td:nth-child(3) { width: 120px; }  /* Name */
+/* TABLE */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 8.3px;       /* 🔑 slightly smaller */
+  transform: scale(0.986); /* 🔑 shrink to avoid cut */
+  transform-origin: top left;
+}
 
-  th:nth-child(16), td:nth-child(16) {
-    width: 140px;    /* ✅ REMARK COLUMN WIDE */
-    text-align: left;
-  }
+th, td {
+  border: 1px solid #000;
+  padding: 3px 2px;
+  text-align: center;
+  word-break: break-word;
+}
 
-  .page {
-    page-break-after: always;
-  }
+/* HEADER */
+th {
+  background: #eee;
+  font-weight: bold;
+}
+
+/* COLUMN WIDTHS (CRITICAL) */
+th:nth-child(1),  td:nth-child(1)  { width: 28px; }
+th:nth-child(2),  td:nth-child(2)  { width: 45px; }
+th:nth-child(3),  td:nth-child(3)  { width: 115px; }
+th:nth-child(4),  td:nth-child(4)  { width: 55px; }
+th:nth-child(5),  td:nth-child(5)  { width: 55px; }
+th:nth-child(6),  td:nth-child(6)  { width: 60px; }
+th:nth-child(7),  td:nth-child(7)  { width: 45px; }
+th:nth-child(8),  td:nth-child(8)  { width: 45px; }
+th:nth-child(9),  td:nth-child(9)  { width: 45px; }
+th:nth-child(10), td:nth-child(10) { width: 45px; }
+th:nth-child(11), td:nth-child(11) { width: 45px; }
+th:nth-child(12), td:nth-child(12) { width: 45px; }
+th:nth-child(13), td:nth-child(13) { width: 45px; }
+th:nth-child(14), td:nth-child(14) { width: 65px; }
+th:nth-child(15), td:nth-child(15) { width: 40px; }
+th:nth-child(16), td:nth-child(16) { width: 150px; text-align:left; }
+
+/* PAGE BREAK */
+.page-break {
+  page-break-after: always;
+}
 </style>
+
+
 
       th { background:#eee; }
       .page { page-break-after: always; }
