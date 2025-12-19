@@ -894,17 +894,25 @@ async function viewAdvances(id, month){
     html += `<p><strong>Total: ₹${tot.toFixed(2)}</strong></p>`;
   }
   html += '</body></html>';
- const blob = new Blob([html], { type: 'text/html' });
-const url = URL.createObjectURL(blob);
+ const div = document.createElement('div');
+div.innerHTML = html;
+document.body.appendChild(div);
 
-const a = document.createElement('a');
-a.href = url;
-a.download = `salary_sheet_${month}.pdf`;
-document.body.appendChild(a);
-a.click();
-a.remove();
+html2pdf()
+  .from(div)
+  .set({
+    filename: `shift_sheet_${month}.pdf`,
+    jsPDF: { orientation: 'landscape', format: 'a4', unit: 'mm' },
+    html2canvas: {
+      scale: 1.2,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: 1400
+    }
+  })
+  .save()
+  .then(() => div.remove());
 
-URL.revokeObjectURL(url);
 
 }
 
@@ -1221,17 +1229,25 @@ td.left { text-align:left; padding-left:6px; }
     html += '</tbody></table>';
   }
   html += '</body></html>';
-const blob = new Blob([html], { type: 'text/html' });
-const url = URL.createObjectURL(blob);
+const div = document.createElement('div');
+div.innerHTML = html;
+document.body.appendChild(div);
 
-const a = document.createElement('a');
-a.href = url;
-a.download = `salary_sheet_${month}.pdf`;
-document.body.appendChild(a);
-a.click();
-a.remove();
+html2pdf()
+  .from(div)
+  .set({
+    filename: `shift_sheet_${month}.pdf`,
+    jsPDF: { orientation: 'landscape', format: 'a4', unit: 'mm' },
+    html2canvas: {
+      scale: 1.2,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: 1400
+    }
+  })
+  .save()
+  .then(() => div.remove());
 
-URL.revokeObjectURL(url);
 
 }
 
@@ -1920,7 +1936,6 @@ window.addEventListener('load', async ()=>{
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
