@@ -832,23 +832,28 @@ $('saveAdv').onclick = async ()=>{
   const advRef = db.collection('advances').doc(labId);
   
   try{
-    await db.runTransaction(async (transaction) => {
-        // The item to be added/updated (Amount is Number type)
-        const newAdvanceItem = { date: newDate, amount: newAmt, note: newNote };
+   const newAdvanceItem = {
+  date: newDate,
+  amount: newAmt,
+  note: newNote
+};
 
-        if (isEditing) {
-            // 1. REMOVE the old advance object (must be exact object: date, amount, note)
-            transaction.update(advRef, { 
-                items: firebase.firestore.FieldValue.arrayRemove(advanceToEdit)
-            });
-        }
-        
-        // 2. ADD the new advance object (the edited or newly added one)
-        // This will successfully add the new advance, even if newAmt is 0 (if editing)
-        transaction.update(advRef, { 
-            items: firebase.firestore.FieldValue.arrayUnion(newAdvanceItem)
-        });
-    });
+if (isEditing) {
+  // 🔹 Ensure document exists first
+  await advRef.set({ items: [] }, { merge: true });
+
+  // 🔹 Remove old item
+  await advRef.update({
+    items: firebase.firestore.FieldValue.arrayRemove(advanceToEdit)
+  });
+}
+
+// 🔹 Add new / edited item (works even if doc was missing)
+await advRef.set(
+  { items: firebase.firestore.FieldValue.arrayUnion(newAdvanceItem) },
+  { merge: true }
+);
+
 
     clearAdvForm();
     await renderAdvances(); 
