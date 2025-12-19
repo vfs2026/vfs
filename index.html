@@ -261,16 +261,24 @@
     <div id="salaryTabContent" class="tab-content card hidden">
         <div class="card" id="salaryCard" style="margin-top:0">
           <h3>Salary Sheet</h3>
-          <div style="display:flex;gap:8px;align-items:center">
-            <label>Month</label>
-            <input type="month" id="salaryMonth">
-            <button id="showSalary">Show Salary</button>
-            <div style="flex:1"></div>
-            <button class="success" id="saveSalary">Save Salary Sheet</button>
-            <button id="exportSalaryCSV">Export CSV</button>
-            <button id="exportSalaryXLS">Export XLS</button>
-            <button id="exportSalaryPDF">Export PDF</button>
-          </div>
+        <div style="display:flex;gap:8px;align-items:center">
+  <label>Month</label>
+  <input type="month" id="salaryMonth">
+  <button id="showSalary">Show Salary</button>
+
+  <label style="margin-left:12px">Search</label>
+  <input id="salarySearch"
+         class="search"
+         placeholder="ID or name"
+         oninput="salaryFilter()">
+
+  <div style="flex:1"></div>
+  <button class="success" id="saveSalary">Save Salary Sheet</button>
+  <button id="exportSalaryCSV">Export CSV</button>
+  <button id="exportSalaryXLS">Export XLS</button>
+  <button id="exportSalaryPDF">Export PDF</button>
+</div>
+
           <div class="table-wrap" style="margin-top:10px">
             <table id="salaryTable"><thead><tr>
               <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
@@ -659,15 +667,18 @@ $('saveAll').onclick = async ()=>{
 };
 
 /* Owner search */
-function ownerFilter(){
-  const q = $('ownerSearch').value.trim().toLowerCase();
-  document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
-    const text = (tr.querySelector('.sticky-name')?.textContent || '').toLowerCase();
-    const isVisible = (!q || text.includes(q));
-    // Use the style property to control visibility, which the key handler checks
-    tr.style.display = isVisible ? '' : 'none'; 
+function salaryFilter(){
+  const q = $('salarySearch').value.trim().toLowerCase();
+
+  document.querySelectorAll('#salaryTable tbody tr').forEach(tr => {
+    const text = (
+      tr.querySelector('.sticky-name')?.textContent || ''
+    ).toLowerCase();
+
+    tr.style.display = (!q || text.includes(q)) ? '' : 'none';
   });
 }
+
 // Note: oninput is wired directly to the HTML now
 
 /* Advances UI */
@@ -1874,7 +1885,6 @@ window.addEventListener('load', async ()=>{
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
