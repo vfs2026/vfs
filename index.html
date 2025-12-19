@@ -1069,13 +1069,20 @@ const amtPerShift = Number(l.rate || 0);
 
 tbody.appendChild(tr);
   // attach event listeners (recalculate whenever a relevant field changes)
-  document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => {
-    inp.addEventListener('input', salaryInputsChanged);
-    // Add arrow key navigation for all inputs/selects in the salary sheet
-    if(inp.classList.contains('sal-editable')) {
-      inp.addEventListener('keydown', salaryCellKeyHandler);
+ document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => {
+  inp.addEventListener('input', salaryInputsChanged);
+
+  /* ✅ AUTO SELECT TEXT ON FOCUS */
+  inp.addEventListener('focus', (e) => {
+    if (e.target.select) {
+      setTimeout(() => e.target.select(), 0);
     }
   });
+
+  if(inp.classList.contains('sal-editable')) {
+    inp.addEventListener('keydown', salaryCellKeyHandler);
+  }
+});
 
   // Force a recalculation pass for every row so Paid column is guaranteed correct after "Show Salary"
   Array.from(document.querySelectorAll('#salaryTable tbody tr')).forEach(row => {
