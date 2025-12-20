@@ -1,3 +1,4 @@
+ 
 <!doctype html>
 <html lang="en">
 <head>
@@ -1284,7 +1285,10 @@ async function collectSalaryForMonth(month){
       debit: tr.querySelector('.sal-debit').value,
       jvc: tr.querySelector('.sal-jvc').value,
       other: tr.querySelector('.sal-other').value,
-      paymentMode: tr.children[13].querySelector('input').value,
+
+      // ✅ FIXED INDEX
+      paymentMode: tr.children[12].querySelector('input').value,
+
       paidSalary: tr.querySelector('.sal-paid').value,
       remarks: tr.querySelector('.sal-remarks').value
     });
@@ -1292,6 +1296,7 @@ async function collectSalaryForMonth(month){
 
   return rows;
 }
+
 
 
 /* Salary Export Functions (IMPLEMENTED) */
@@ -1347,11 +1352,10 @@ const orderedRows = [...acRows, ...cashRows];
 
   const ROWS_PER_PAGE = 30; // SAFE LIMIT
   let pages = [];
-
- for(let i = 0; i < orderedRows.length; i += ROWS_PER_PAGE){
+for(let i = 0; i < orderedRows.length; i += ROWS_PER_PAGE){
   pages.push(orderedRows.slice(i, i + ROWS_PER_PAGE));
+}
 
-  }
 
   let html = `
   <div id="pdfRoot" style="font-family:Arial">
@@ -1448,30 +1452,35 @@ pages.forEach((pageRows, pageIndex) => {
     <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
     <th>Advance</th><th>Mess</th><th>U/F</th><th>P/F</th>
     <th>Debit</th><th>JVC</th><th>Other</th>
-    <th>Paid</th><th>A/c</th><th>Remark</th>
+   <th>Payment Mode</th>
+<th>Paid</th>
+<th>Remark</th>
+
   </tr>
 </thead>` : ``}
       <tbody>
 
         ${pageRows.map(r=>`
-  <tr>
-    <td>${r.sno}</td>
-    <td>${r.id}</td>
-    <td>${r.name}</td>
-    <td>${r.amtPerShift}</td>
-    <td>${r.totalShift}</td>
-    <td>${r.totalAmt}</td>
-    <td>${r.monthlyAdvance}</td>
-    <td>${r.mess}</td>
-    <td>${r.uf}</td>
-    <td>${r.pf}</td>
-    <td>${r.debit}</td>
-    <td>${r.jvc}</td>
-    <td>${r.other}</td>
-    <td>${r.paidSalary}</td>
-    <td>${r.paymentMode || ''}</td>
-    <td>${r.remarks || ''}</td>
-  </tr>
+ <tr>
+  <td>${r.sno}</td>
+  <td>${r.id}</td>
+  <td>${r.name}</td>
+  <td>${r.amtPerShift}</td>
+  <td>${r.totalShift}</td>
+  <td>${r.totalAmt}</td>
+  <td>${r.monthlyAdvance}</td>
+  <td>${r.mess}</td>
+  <td>${r.uf}</td>
+  <td>${r.pf}</td>
+  <td>${r.debit}</td>
+  <td>${r.jvc}</td>
+  <td>${r.other}</td>
+<td>${r.paymentMode}</td>
+<td>${r.paidSalary}</td>
+<td>${r.remarks}</td>
+
+</tr>
+
 `).join('')}
 
         </tbody>
@@ -1981,6 +1990,7 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
 
 
 
