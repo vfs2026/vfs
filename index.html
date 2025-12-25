@@ -705,7 +705,10 @@ html += `
       // ensure z-index while focused so sticky name doesn't cover it
       ev.target.style.zIndex = '9999';
     });
-    el.addEventListener('blur', (ev) => {
+    el.addEventListener('input', () => {
+  updateRowTotals();   // 🔑 INSTANT UPDATE
+});
+el.addEventListener('blur', (ev) => {
       ev.target.style.zIndex = '';
     });
 
