@@ -408,7 +408,7 @@ function parseAttendance(ci){
     return 0;
   }
 
-  ci.value = num;
+  
   return num;
 }
 
@@ -710,10 +710,32 @@ html += `
     });
 
     // allow decimal by keeping step - already set, but ensure input type allows '.' on locales
-    el.addEventListener('keydown', attCellKeyHandler);
+
 
     // update totals on change/input
-    el.addEventListener('input', () => { updateRowTotals(); }); 
+el.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();          // stop browser default
+    updateRowTotals();           // recalc row
+    const search = document.getElementById('ownerSearch');
+    if (search) {
+      search.focus();            // ✅ JUMP TO SEARCH BOX
+      search.select();           // optional: auto select text
+    }
+  }
+});
+
+el.addEventListener('blur', () => {
+  const val = el.value.trim().toUpperCase();
+
+  if(val === 'A') return;
+
+  const num = Number(val);
+  if(!isNaN(num)){
+    el.value = num.toFixed(2);   // ✅ format AFTER typing
+  }
+});
+
   });
 
   updateRowTotals();
@@ -1887,13 +1909,23 @@ function getRateForLabour(id){ return 0; }
 */
 function attCellKeyHandler(e){
   // 1. Tab/Enter: Auto-return to search box
-  if(e.key === 'Enter' || e.key === 'Tab'){ 
-    e.preventDefault(); 
-    updateRowTotals();
-    // Move to the search box
-    $('ownerSearch').focus();
-    return;
+if(e.key === 'Enter'){ 
+  e.preventDefault(); 
+  updateRowTotals();
+
+  const cells = Array.from(
+    e.target.closest('tr').querySelectorAll('.attCell')
+  );
+  const idx = cells.indexOf(e.target);
+
+  if(idx < cells.length - 1){
+    cells[idx + 1].focus();
+    cells[idx + 1].select();
   }
+
+  return;
+}
+
 
   // Check if target is an attendance cell
   const el = e.target;
@@ -1932,7 +1964,7 @@ function attCellKeyHandler(e){
       if(nextCell) nextCell.focus();
     } else {
         // If at the end/beginning of the filtered list, return to search box
-        $('ownerSearch').focus();
+   
     }
   }
 }
