@@ -100,6 +100,35 @@
 
   /* small tweak so clicking a cell doesn't auto-select the row behind it */
   .attCell { background: #fff; }
+/* Labour portal – Paid Salary highlight */
+.paid-box {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border: 2px solid #28a745;
+  background: #eaffea;
+  color: #1e7e34;
+  font-weight: bold;
+  font-size: 22px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+
+/* Sunday column highlight */
+.sunday-col 
+
+{
+  background-color: #fff7cc !important;
+}
+
+/* ABSENT (A) highlight */
+.att-absent {
+  background-color: #ffe5e5 !important;
+  color: #b00000 !important;
+  font-weight: bold;
+  text-align: center;
+}
+
 
   /* Drag & drop styles */
   .draggable-row { cursor:grab; }
@@ -362,6 +391,27 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
 <script>
+function parseAttendance(ci){
+  const val = ci.value.trim().toUpperCase();
+
+  if(val === 'A'){
+    ci.value = 'A';
+    ci.classList.add('att-absent');
+    return 0; // ABSENT = 0 shift
+  }
+
+  ci.classList.remove('att-absent');
+
+  const num = Number(val);
+  if(isNaN(num)){
+    ci.value = '';
+    return 0;
+  }
+
+  ci.value = num;
+  return num;
+}
+
 /* ---------------------------
   Put your firebase config here (you gave this earlier)
 ---------------------------- */
@@ -614,13 +664,34 @@ async function generateOwnerTable(scrollToTop = true){
     attMap[l.id] = d.exists ? d.data() : {shifts:{}, rate: l.rate};
   }));
   let html = '<table id="ownerTable"><thead><tr><th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>';
-  days.forEach(d=> html += `<th>${d}</th>`);
+  days.forEach(d => {
+  const isSunday = new Date(`${month}-${String(d).padStart(2,'0')}`).getDay() === 0;
+  html += `<th class="${isSunday ? 'sunday-col' : ''}">${d}</th>`;
+});
+
   html += '<th>Total</th><th>Actions</th></tr></thead><tbody>';
   labs.forEach((l,i)=>{
     const rec = attMap[l.id] || {shifts:{}, rate:l.rate};
     let total = 0;
     html += `<tr data-id="${l.id}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
-    days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; html += `<td><input type="number" step="0.25" min="0" class="attCell" data-day="${d}" data-id="${l.id}" value="${v}" style="width:78px"></td>`;});
+    days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; const isAbsent = Number(v) === 0;
+const displayVal = isAbsent ? 'A' : v;
+
+const isSunday = new Date(`${month}-${String(d).padStart(2,'0')}`).getDay() === 0;
+
+html += `
+<td class="${isSunday ? 'sunday-col' : ''}">
+  <input
+    type="text"
+    class="attCell ${isAbsent ? 'att-absent' : ''}"
+    data-day="${d}"
+    data-id="${l.id}"
+    value="${displayVal}"
+    style="width:78px"
+  />
+</td>`;
+
+});
     html += `<td class="rowTotal">${Number(total).toFixed(2)}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}')">View</button></td></tr>`;
   });
   html += '</tbody></table>';
@@ -649,14 +720,17 @@ async function generateOwnerTable(scrollToTop = true){
   if(scrollToTop) scrollToElement($('ownerTableWrap'));
 }
 $('loadTable').onclick = generateOwnerTable;
-
 function updateRowTotals(){
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
     let s = 0;
-    tr.querySelectorAll('.attCell').forEach(ci=> s += Number(ci.value) || 0);
-    const cell = tr.querySelector('.rowTotal'); if(cell) cell.textContent = Number(s).toFixed(2);
+    tr.querySelectorAll('.attCell').forEach(ci=>{
+      s += parseAttendance(ci);
+    });
+    const cell = tr.querySelector('.rowTotal');
+    if(cell) cell.textContent = s.toFixed(2);
   });
 }
+
 
 /* Save attendance to Firestore (owner-only) */
 $('saveAll').onclick = async ()=>{
@@ -667,7 +741,9 @@ $('saveAll').onclick = async ()=>{
     const id = tr.dataset.id;
     const key = `${id}_${month}`;
     const shifts = {};
-    tr.querySelectorAll('.attCell').forEach(ci => { const d = ci.dataset.day; shifts[d] = Number(ci.value) || 0; });
+    tr.querySelectorAll('.attCell').forEach(ci => { const d = ci.dataset.day; const v = ci.value.trim().toUpperCase();
+shifts[d] = (v === 'A') ? 0 : (Number(v) || 0);
+ });
     const rate = Number(getRateForLabour(id)) || null;
     toSave[key] = { shifts, rate };
   });
@@ -951,16 +1027,19 @@ $('saveSalary').onclick = async ()=>{
     const other = Number(tr.querySelector('.sal-other').value) || 0;
     const paid = Number(tr.querySelector('.sal-paid').value) || 0; // Read user-overridden or calculated Paid
     const remarks = tr.querySelector('.sal-remarks').value || '';
+const payload = {
+  amtPerShift: Number(tr.querySelector('.sal-amt').value),   // ✅ CRITICAL
+  paymentMode: tr.children[12].querySelector('input').value, // ✅ CRITICAL
 
-    const payload = {
   totalShift,
   totalAmt,
   monthlyAdvance,
   mess, uf, pf, debit, jvc, other,
-  paid: paid,
+  paid,
   remarks,
   savedAt: firebase.firestore.FieldValue.serverTimestamp()
 };
+
 
     
     const docId = `${id}_${month}`;
@@ -996,9 +1075,10 @@ async function renderSalarySheet(){
     const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const saved = await fetchSalary(l.id, month) || {};
 
-    // determine base values (ensure numeric)
-   // Always take latest rate from Labour Management
-const amtPerShift = Number(l.rate || 0);
+
+  const amtPerShift = Number(l.rate || 0);
+
+
 
     const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0);
     const debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
@@ -1249,14 +1329,8 @@ td.left { text-align:left; padding-left:6px; }
 const blob = new Blob([html], { type: 'text/html' });
 const url = URL.createObjectURL(blob);
 
-const a = document.createElement('a');
-a.href = url;
-a.download = `salary_sheet_${month}.pdf`;
-document.body.appendChild(a);
-a.click();
-a.remove();
-
-URL.revokeObjectURL(url);
+// 🔑 OPEN IN NEW TAB (NOT DOWNLOAD AS PDF)
+window.open(url, '_blank');
 
 }
 
@@ -1452,35 +1526,30 @@ pages.forEach((pageRows, pageIndex) => {
     <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
     <th>Advance</th><th>Mess</th><th>U/F</th><th>P/F</th>
     <th>Debit</th><th>JVC</th><th>Other</th>
-   <th>Payment Mode</th>
-<th>Paid</th>
-<th>Remark</th>
-
+    <th>Paid</th><th>A/c</th><th>Remark</th>
   </tr>
 </thead>` : ``}
       <tbody>
 
         ${pageRows.map(r=>`
- <tr>
-  <td>${r.sno}</td>
-  <td>${r.id}</td>
-  <td>${r.name}</td>
-  <td>${r.amtPerShift}</td>
-  <td>${r.totalShift}</td>
-  <td>${r.totalAmt}</td>
-  <td>${r.monthlyAdvance}</td>
-  <td>${r.mess}</td>
-  <td>${r.uf}</td>
-  <td>${r.pf}</td>
-  <td>${r.debit}</td>
-  <td>${r.jvc}</td>
-  <td>${r.other}</td>
-<td>${r.paymentMode}</td>
-<td>${r.paidSalary}</td>
-<td>${r.remarks}</td>
-
-</tr>
-
+  <tr>
+    <td>${r.sno}</td>
+    <td>${r.id}</td>
+    <td>${r.name}</td>
+    <td>${r.amtPerShift}</td>
+    <td>${r.totalShift}</td>
+    <td>${r.totalAmt}</td>
+    <td>${r.monthlyAdvance}</td>
+    <td>${r.mess}</td>
+    <td>${r.uf}</td>
+    <td>${r.pf}</td>
+    <td>${r.debit}</td>
+    <td>${r.jvc}</td>
+    <td>${r.other}</td>
+    <td>${r.paidSalary}</td>
+    <td>${r.paymentMode || ''}</td>
+    <td>${r.remarks || ''}</td>
+  </tr>
 `).join('')}
 
         </tbody>
@@ -1707,11 +1776,44 @@ function renderLabourInfo(){ if(!currentLabour) return; $('labourInfo').innerHTM
 async function renderLabourView(){
   if(!currentLabour) return; const month = $('labourMonth').value; if(!month) return;
   const rec = await fetchAttendance(currentLabour.id, month);
+const amtPerShift = Number(currentLabour.rate || 0);
+
   const days = getDays(month);
   let html = '<h3>Attendance</h3><table><thead><tr><th>Date</th><th>Shifts</th></tr></thead><tbody>';
   let total = 0;
-  days.forEach(d=>{ const v = Number(rec.shifts && rec.shifts[d] !== undefined ? rec.shifts[d] : 0) || 0; html += `<tr><td class="left">${d}</td><td>${v.toFixed(2)}</td></tr>`; total += v; });
-  html += `</tbody></table><p class="small">Total shifts: ${total.toFixed(2)}</p>`;
+ days.forEach(d=>{
+  const v = Number(rec.shifts && rec.shifts[d] !== undefined ? rec.shifts[d] : 0) || 0;
+
+  const isAbsent = v === 0;
+  const isSunday =
+    new Date(`${month}-${String(d).padStart(2,'0')}`).getDay() === 0;
+
+  html += `
+    <tr>
+      <td class="left ${isSunday ? 'sunday-col' : ''}">${d}</td>
+      <td class="${isSunday ? 'sunday-col' : ''} ${isAbsent ? 'att-absent' : ''}">
+        ${isAbsent ? 'A' : v.toFixed(2)}
+      </td>
+    </tr>
+  `;
+});
+
+let absentCount = 0;
+days.forEach(d=>{
+  const v = Number(rec.shifts && rec.shifts[d] !== undefined ? rec.shifts[d] : 0) || 0;
+  if(v === 0) absentCount++;
+});
+
+html += `
+</tbody></table>
+
+
+<div class="absent-box">
+  TOTAL ABSENT : ${absentCount}
+</div>
+`;
+
+
   $('labourAttendance').innerHTML = html;
 
   const advItemsAll = await fetchAdvancesForLab(currentLabour.id);
@@ -1720,29 +1822,46 @@ async function renderLabourView(){
   if(!advList.length) advHtml += '<p class="small">No advances for month</p>'; else { advHtml += '<table><thead><tr><th>Date</th><th>Amount</th><th>Note</th></tr></thead><tbody>'; advList.slice().reverse().forEach(a=> advHtml += `<tr><td>${a.date}</td><td style="text-align:right">₹${Number(a.amount).toFixed(2)}</td><td class="left">${a.note||''}</td></tr>`); advHtml += '</tbody></table>'; advHtml += `<p class="small"><strong>Total: ₹${advList.reduce((s,x)=> s + (Number(x.amount)||0),0).toFixed(2)}</strong></p>`; }
   $('labourAdvance').innerHTML = advHtml;
 
-  const saved = await fetchSalary(currentLabour.id, month) || {};
-  const amtPerShift = Number(saved.amtPerShift !== undefined ? saved.amtPerShift : (rec.rate||currentLabour.rate)) || currentLabour.rate;
-  const totalShift = Object.values(rec.shifts||{}).reduce((s,v)=> s + (Number(v)||0), 0);
-  const totalAmt = Number((amtPerShift * totalShift).toFixed(2));
-  const advTotal = advList.reduce((s,x)=> s + (Number(x.amount)||0), 0);
-  const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0), debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
-  const deductions = Number((advTotal + mess + uf + pf + debit + jvc + other).toFixed(2));
-  const paidCalculated = Number((totalAmt - deductions).toFixed(2));
-  let salaryHtml = `<h3>Salary — ${month}</h3>`;
-  salaryHtml += `<table><tbody>`;
-  salaryHtml += `<tr><td class="left">Amt/Shift</td><td>₹${Number(amtPerShift).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">Total Shift</td><td>${Number(totalShift).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">Total Amount</td><td>₹${totalAmt}</td></tr>`;
-  salaryHtml += `<tr><td class="left">Monthly Advance (sum of advances)</td><td>₹${Number(advTotal).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">Mess</td><td>₹${Number(mess).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">U/F</td><td>₹${Number(uf).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">P/F</td><td>₹${Number(pf).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">Debit</td><td>₹${Number(debit).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">JVC</td><td>₹${Number(jvc).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left">Other</td><td>₹${Number(other).toFixed(2)}</td></tr>`;
-  salaryHtml += `<tr><td class="left"><strong>Paid (calculated)</strong></td><td><strong>₹${paidCalculated}</strong></td></tr>`;
-  salaryHtml += `<tr><td class="left">Paid (owner saved)</td><td>${saved.paid !== undefined ? '₹'+Number(saved.paid).toFixed(2) : '—'}</td></tr>`;
-  salaryHtml += `</tbody></table>`;
+// ===============================
+// ✅ LABOUR SALARY (READ ONLY)
+// ===============================
+const saved = await fetchSalary(currentLabour.id, month);
+
+if (!saved) {
+  $('labourSalary').innerHTML =
+    `<h3>Salary — ${month}</h3>
+     <p class="small muted">Salary not generated yet.</p>`;
+  return;
+}
+
+$('labourSalary').innerHTML = `
+<h3>Salary — ${month}</h3>
+<table>
+<tbody>
+<tr><td class="left">Amt / Shift</td><td>₹${Number(saved.amtPerShift || 0).toFixed(2)}</td></tr>
+<tr><td class="left">Total Shift</td><td>${Number(saved.totalShift || 0).toFixed(2)}</td></tr>
+<tr><td class="left">Total Amount</td><td>₹${Number(saved.totalAmt || 0).toFixed(2)}</td></tr>
+<tr><td class="left">Advance</td><td>₹${Number(saved.monthlyAdvance || 0).toFixed(2)}</td></tr>
+<tr><td class="left">Mess</td><td>₹${Number(saved.mess || 0).toFixed(2)}</td></tr>
+<tr><td class="left">U/F</td><td>₹${Number(saved.uf || 0).toFixed(2)}</td></tr>
+<tr><td class="left">P/F</td><td>₹${Number(saved.pf || 0).toFixed(2)}</td></tr>
+<tr><td class="left">Debit</td><td>₹${Number(saved.debit || 0).toFixed(2)}</td></tr>
+<tr><td class="left">JVC</td><td>₹${Number(saved.jvc || 0).toFixed(2)}</td></tr>
+<tr><td class="left">Other</td><td>₹${Number(saved.other || 0).toFixed(2)}</td></tr>
+<tr>
+  <td class="left"><strong>Paid Salary</strong></td>
+  <td><strong>₹${Number(saved.paid || 0).toFixed(2)}</strong></td>
+</tr>
+<tr><td class="left">Payment Mode</td><td>${saved.paymentMode || '—'}</td></tr>
+</tbody>
+</table>
+<div class="paid-box">
+  PAID SALARY : ₹${Number(saved.paid || 0).toFixed(2)}
+</div>
+
+`;
+
+
   $('labourSalary').innerHTML = salaryHtml;
 }
 
@@ -1990,6 +2109,14 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
 
 
 
