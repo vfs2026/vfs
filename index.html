@@ -411,6 +411,23 @@ function parseAttendance(ci){
   
   return num;
 }
+// 🔔 Beep sound (used only before editing numeric cell)
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.frequency.value = 900; // beep pitch
+    gain.gain.value = 0.1;     // low volume
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12); // short beep
+  } catch (e) {}
+}
 
 /* ---------------------------
   Put your firebase config here (you gave this earlier)
@@ -700,11 +717,18 @@ html += `
   // add behavior: auto-select text on focus & arrow navigation & ensure focused input sits above sticky columns
   document.querySelectorAll('.attCell').forEach((el) => {
     // auto select on focus (works for mouse and tab)
-    el.addEventListener('focus', (ev) => {
-      try { ev.target.select(); } catch(e) {}
-      // ensure z-index while focused so sticky name doesn't cover it
-      ev.target.style.zIndex = '9999';
-    });
+  el.addEventListener('focus', (ev) => {
+  const val = ev.target.value.trim().toUpperCase();
+
+  // 🔔 BEEP BEFORE EDIT — ONLY if value is numeric
+  if (val !== '' && val !== 'A' && !isNaN(Number(val))) {
+    playBeep();
+  }
+
+  try { ev.target.select(); } catch(e) {}
+  ev.target.style.zIndex = '9999';
+});
+
     el.addEventListener('input', () => {
   updateRowTotals();   // 🔑 INSTANT UPDATE
 });
@@ -2144,6 +2168,7 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
 
 
 
