@@ -1483,6 +1483,17 @@ const orderedRows = [...acRows, ...cashRows];
   html += '</table>';
   downloadBlob('\uFEFF'+html, `salary_sheet_${month}.xls`, 'application/vnd.ms-excel');
 }
+function formatMonthName(monthStr){
+  // monthStr = "2026-01"
+  const [year, month] = monthStr.split('-');
+  const date = new Date(Number(year), Number(month) - 1, 1);
+
+  return date.toLocaleString('en-US', {
+    month: 'long',
+    year: 'numeric'
+  }).toUpperCase();
+}
+
 async function exportSalaryPDF(){
   const month = $('salaryMonth').value || $('ownerMonth').value;
   if(!month){ alert('Select month'); return; }
@@ -1504,14 +1515,12 @@ for(let i = 0; i < orderedRows.length; i += ROWS_PER_PAGE){
   pages.push(orderedRows.slice(i, i + ROWS_PER_PAGE));
 }
 
-
-  let html = `
-  <div id="pdfRoot" style="font-family:Arial">
-    <style>
+let html = `
+<div id="pdfRoot">
 <style>
 @page {
   size: A4 landscape;
-  margin: 0;              /* 🔑 REMOVE browser margins */
+  margin: 0;
 }
 
 html, body {
@@ -1535,6 +1544,8 @@ table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+margin-top: 6px;
+
   font-size: 8.3px;       /* 🔑 slightly smaller */
   transform: scale(0.986); /* 🔑 shrink to avoid cut */
   transform-origin: top left;
@@ -1575,20 +1586,31 @@ th:nth-child(16), td:nth-child(16) { width: 150px; text-align:left; }
 .page-break {
   page-break-after: always;
 }
+.page-break {
+  page-break-after: always;
+}
 </style>
 
-
-
-      th { background:#eee; }
-      .page { page-break-after: always; }
-    </style>
   `;
 pages.forEach((pageRows, pageIndex) => {
 
-  /* Title ONLY on first page */
-  if(pageIndex === 0){
-    html += `<h2 style="text-align:center">Salary Sheet - ${month}</h2>`;
-  }
+if(pageIndex === 0){
+  html += `
+  <div style="
+    text-align:center;
+    font-weight:bold;
+    margin-bottom:6px;
+  ">
+    <div style="font-size:18px; letter-spacing:1px;">
+      VEERANAR FINISHERS
+    </div>
+    <div style="font-size:14px; margin-top:4px;">
+      MONTHLY SALARY ${formatMonthName(month)}
+
+    </div>
+  </div>
+  `;
+}
 
   html += `
   <div class="page">
@@ -2236,7 +2258,6 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
