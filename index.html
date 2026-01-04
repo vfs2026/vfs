@@ -513,21 +513,34 @@ $('labourLogout').onclick = ()=> location.reload();
    NOTE: we fetch all docs and sort client-side by 'order' (if present) or 'createdAt' */
 async function fetchAllLabours(){
   const snap = await db.collection('labours').get();
-  const labs = snap.docs.map(d => ({id: d.id, ...d.data()}));
-  // sort: first by explicit numeric 'order' (if present), else by createdAt (timestamp), else by id
-  labs.sort((a,b) => {
-    const ao = (a.order === undefined || a.order === null) ? Number.POSITIVE_INFINITY : Number(a.order);
-    const bo = (b.order === undefined || b.order === null) ? Number.POSITIVE_INFINITY : Number(b.order);
-    if(ao !== bo) return ao - bo;
-    // tie-breaker: createdAt
-    const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-    const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-    if(at !== bt) return at - bt;
-    // final fallback: id
-    return (a.id || '').localeCompare(b.id || '');
+  const month =
+    $('ownerMonth')?.value ||
+    $('salaryMonth')?.value ||
+    $('advMonth')?.value ||
+    getMonth();
+
+  const labs = snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(l => {
+      if(l.status === 'inactive' && l.inactiveFrom && l.inactiveFrom <= month){
+        return false;
+      }
+      if(l.activeFrom && l.activeFrom > month){
+        return false;
+      }
+      return true;
+    });
+
+  // ✅ SORT BY ORDER (VERY IMPORTANT)
+  labs.sort((a, b) => {
+    const ao = (a.order ?? 999999);
+    const bo = (b.order ?? 999999);
+    return ao - bo;
   });
+
   return labs;
 }
+
 
 async function fetchLabourById(id){
   const d = await db.collection('labours').doc(id).get();
@@ -537,31 +550,43 @@ async function fetchLabourById(id){
 async function saveLabourToFirestore(lab){
   const ref = db.collection('labours').doc(lab.id);
   const doc = await ref.get();
+
   const payload = {
+    id: lab.id,
     name: lab.name || '',
     password: lab.password || '',
     rate: Number(lab.rate) || 0,
     paymentMode: lab.paymentMode || 'Cash',
-    id: lab.id
+
+    // ✅ NEW FIELDS
+    status: lab.status || 'active',          // active | inactive
+    activeFrom: lab.activeFrom || getMonth(),// YYYY-MM
+    inactiveFrom: lab.inactiveFrom || null
   };
+
   if(!doc.exists){
     payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   }
-  await ref.set(payload, {merge:true});
+
+  await ref.set(payload, { merge:true });
 }
+
 async function deleteLabourFromFirestore(id){
-  await db.collection('labours').doc(id).delete();
-  const attAll = await db.collection('attendance').get();
-  const batch = db.batch();
-  attAll.docs.forEach(doc => {
-    if(doc.id.startsWith(id + '_')) batch.delete(doc.ref);
-  });
-  const advDoc = db.collection('advances').doc(id);
-  batch.delete(advDoc);
-  const salAll = await db.collection('salaries').get();
-  salAll.docs.forEach(doc => { if(doc.id.startsWith(id + '_')) batch.delete(doc.ref); });
-  await batch.commit();
+  const month = $('ownerMonth').value;
+  if(!month){
+    alert('Select month first');
+    return;
+  }
+
+  // ✅ DO NOT DELETE ANY DATA
+  await db.collection('labours').doc(id).set({
+    status: 'inactive',
+    inactiveFrom: month
+  }, { merge:true });
+
+  alert('Labour removed from this month only. Old data is safe.');
 }
+
 
 /* Attendance docs: id = `${labId}_${month}` */
 async function fetchAttendance(labId, month){
@@ -1743,33 +1768,38 @@ $('cancelReorderBtn').onclick = async () => {
   await renderLabourList(); // this re-loads from Firestore (original or persisted order)
 };
 
-$('fixOrderBtn').onclick = async () => {
-  if(!isOwnerSignedIn()){ alert('Owner sign-in required to save order.'); return; }
-  const rows = Array.from(document.querySelectorAll('#labourList tbody tr.lab-row'));
-  // compute new order array
-  const newOrder = rows.map((r, idx) => ({ id: r.dataset.id, order: idx + 1 }));
-  try {
-    // write in batch to Firestore
-    const batch = db.batch();
-    newOrder.forEach(item => {
-      const ref = db.collection('labours').doc(item.id);
-      batch.set(ref, { order: item.order }, { merge: true });
-    });
-    await batch.commit();
-    alert('Order saved.');
-    reorderEnabled = false;
-    $('fixOrderBtn').classList.add('hidden');
-    $('cancelReorderBtn').classList.add('hidden');
-    $('enableReorder').classList.remove('hidden');
-    // re-render all dependent views
-    await renderLabourList();
-    await generateOwnerTable(false); // don't scroll to top, keep focus on list
-    await populateAdvSelect();
-    // No need to render salary/advances, they pull the order dynamically when active
-  } catch (err) {
-    alert('Failed to save order: ' + err.message);
+$('fixOrderBtn').onclick = async ()=>{
+  if(!isOwnerSignedIn()){
+    alert('Owner login required');
+    return;
   }
+
+const rows = document.querySelectorAll('#labourList tr.lab-row');
+
+  if(!rows.length){
+    alert('No rows to reorder');
+    return;
+  }
+
+  const batch = db.batch();
+
+  rows.forEach((row, index) => {
+    const id = row.dataset.id;
+    const ref = db.collection('labours').doc(id);
+    batch.update(ref, { order: index + 1 }); // ✅ SAVE ORDER
+  });
+
+  await batch.commit();
+
+  alert('Labour order saved');
+
+  $('fixOrderBtn').classList.add('hidden');
+  $('cancelReorderBtn').classList.add('hidden');
+  $('enableReorder').classList.remove('hidden');
+
+  await renderLabourList();
 };
+
 
 /* modal and CRUD unchanged */
 $('addLabour').onclick = ()=> openLabourModal();
@@ -1796,17 +1826,55 @@ function openEditLabour(id){ openLabourModal(id); }
 $('cancelLabourBtn').onclick = ()=> { $('labourModal').classList.add('hidden'); scrollToTop(); };
 
 $('saveLabourBtn').onclick = async ()=>{
-  if(!isOwnerSignedIn()){ alert('Owner sign-in required'); return; }
-  const id=$('modalUserId').value.trim(), name=$('modalName').value.trim(), pwd=$('modalPwd').value.trim(), rate=Number($('modalRate').value)||0;
-  const paymentMode = $('modalPayMode').value || 'Cash';
-  if(!id||!name){ alert('Enter ID and name'); return; }
-  try{
-    await saveLabourToFirestore({id, name, password: pwd, rate, paymentMode});
-    $('labourModal').classList.add('hidden'); await renderLabourList(); await generateOwnerTable(false); await populateAdvSelect(); 
-    // Do not call renderSalarySheet/renderAdvances, they will load the new labour when the user switches tabs
-    alert('Saved');
-    scrollToTop();
-  } catch(err){ alert('Save failed: ' + err.message); }
+  if(!isOwnerSignedIn()){
+    alert('Owner login required');
+    return;
+  }
+
+  const id = $('modalUserId').value.trim();
+  const name = $('modalName').value.trim();
+  const pwd = $('modalPwd').value.trim();
+  const rate = Number($('modalRate').value) || 0;
+  const paymentMode = $('modalPayMode').value;
+
+  if(!id || !name){
+    alert('User ID and Name are required');
+    return;
+  }
+
+  // ✅ IMPORTANT: current working month
+  const currentMonth =
+    $('ownerMonth').value ||
+    new Date().toISOString().slice(0,7);
+
+  const lab = {
+    id,
+    name,
+    password: pwd,
+    rate,
+    paymentMode,
+
+    // ✅ STEP 4 CORE LOGIC
+    status: 'active',
+    activeFrom: currentMonth,  // 👈 starts from THIS month only
+    inactiveFrom: null
+  };
+// ✅ FIND LAST ORDER AND APPEND NEW LABOUR AT END
+const existing = await fetchAllLabours();
+const maxOrder = existing.length
+  ? Math.max(...existing.map(l => l.order ?? 0))
+  : 0;
+
+lab.order = maxOrder + 1; // 👈 NEW LABOUR ALWAYS LAST
+
+
+  await saveLabourToFirestore(lab);
+
+  $('labourModal').classList.add('hidden');
+  await renderLabourList();
+  await generateOwnerTable();
+
+  alert('Labour saved for this month onwards');
 };
 
 async function deleteLabour(id){
