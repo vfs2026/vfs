@@ -225,11 +225,6 @@
       <h2 style="display:flex;align-items:center;gap:10px"><img src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' class="logo" alt="logo"> Owner Dashboard</h2>
       <div><button id="ownerLogout">Sign Out</button></div>
     </div>
-<div class="controls" style="margin-bottom:8px">
-  <label><strong>Month</strong></label>
-  <input type="month" id="globalMonth">
-</div>
-
     
     <div id="tabContainer">
         <button class="tab-btn active" data-tab="attendance">Attendance & Shifts</button>
@@ -240,7 +235,7 @@
     <div id="attendanceTabContent" class="tab-content card">
         <div class="controls">
           <label>Month</label>
-          <input type="month" id="ownerMonth" class="hidden">
+          <input type="month" id="ownerMonth">
           <button class="btn" id="loadTable">Load Table</button>
           <div style="flex:1"></div>
           <label>Search</label>
@@ -270,7 +265,7 @@
         <div class="card" id="advancesCard" style="margin-top:0">
           <h3>Advances Management</h3>
           <div style="display:flex;align-items:center;gap:8px">
-            <label>Month</label><input type="month" id="advMonth" class="hidden">
+            <label>Month</label><input type="month" id="advMonth">
             <button id="showAdv">Show</button>
             <div style="flex:1"></div>
             <button id="exportAdvCSV">Export Adv CSV</button>
@@ -310,7 +305,7 @@
           <h3>Salary Sheet</h3>
         <div style="display:flex;gap:8px;align-items:center">
   <label>Month</label>
-  <input type="month" id="salaryMonth" class="hidden">
+  <input type="month" id="salaryMonth">
   <button id="showSalary">Show Salary</button>
 
   <label style="margin-left:12px">Search</label>
@@ -687,10 +682,9 @@ document.querySelectorAll('.tab-btn').forEach(button => {
 
 /* Init owner view: fetch labours to render */
 async function initOwnerView(){
-const currentMonth = new Date().toISOString().slice(0,7);
-$('globalMonth').value = currentMonth;
-syncMonthToAll(currentMonth);
-
+  $('ownerMonth').value = (new Date()).toISOString().slice(0,7);
+  $('advMonth').value = $('ownerMonth').value;
+  $('salaryMonth').value = $('ownerMonth').value;
   await renderLabourList();
   await populateAdvSelect();
   
@@ -1151,8 +1145,6 @@ async function renderSalarySheet(){
     const l = labs[i];
     const att = await fetchAttendance(l.id, month);
     const totalShift = Object.values(att.shifts || {}).reduce((s,v)=> s + (Number(v)||0), 0);
-    const advItems = await fetchAdvancesForLab(l.id);
-    const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const saved = await fetchSalary(l.id, month) || {};
 
 
@@ -1162,7 +1154,8 @@ async function renderSalarySheet(){
 
     const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0);
     const debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
-    const monthlyAdvance = Number(advTotal || 0);
+    const monthlyAdvance = Number(saved.monthlyAdvance || 0);
+
 
     // create row — set inputs with 2-decimal formatting so user sees consistent values
     const totalAmt = Number((amtPerShift * totalShift));
@@ -1205,11 +1198,13 @@ async function renderSalarySheet(){
 </td>
 
 <td>
-  <input class="sal-monthlyAdvance readonly"
-         value="${monthlyAdvance.toFixed(2)}"
-         readonly
-         style="width:110px;background:#f5f7fb">
+  <input class="sal-monthlyAdvance sal-editable"
+         type="number"
+         step="0.01"
+         value="${Number(saved.monthlyAdvance ?? monthlyAdvance).toFixed(2)}"
+         style="width:110px">
 </td>
+
 
 <td><input class="sal-mess sal-editable" type="number" step="0.01" value="${mess.toFixed(2)}"></td>
 <td><input class="sal-uf sal-editable" type="number" step="0.01" value="${uf.toFixed(2)}"></td>
@@ -2019,12 +2014,6 @@ auth.onAuthStateChanged(user => {
   if(user) $('ownerAuthMsg').textContent = 'Signed in as UID: ' + user.uid;
   else $('ownerAuthMsg').textContent = '';
 });
-function syncMonthToAll(month){
-  if($('ownerMonth')) $('ownerMonth').value = month;
-  if($('advMonth')) $('advMonth').value = month;
-  if($('salaryMonth')) $('salaryMonth').value = month;
-}
-
 
 /* ===== Utility functions ===== */
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
@@ -2206,25 +2195,10 @@ $('exportSalaryPDF').onclick = exportSalaryPDF;
 $('exportAdvCSV').onclick = exportAdvCSV;
 $('exportAdvXLS').onclick = exportAdvXLS;
 $('exportAdvPDF').onclick = exportAdvPDF;
-document.getElementById('globalMonth').addEventListener('change', function(){
-  const m = this.value;
-  if(!m) return;
-
-  syncMonthToAll(m);
-
-  generateOwnerTable(false);
-  renderAdvances();
-  renderSalarySheet();
-});
-
 
 /* init on load - we only call renderLabourList and populateAdvSelect here as initOwnerView handles the first tab switch */
 window.addEventListener('load', async ()=>{ 
   try{ 
-const m = new Date().toISOString().slice(0,7);
-$('globalMonth').value = m;
-syncMonthToAll(m);
-
     await renderLabourList(); 
     await populateAdvSelect(); 
   }catch(e){ 
@@ -2285,7 +2259,6 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
