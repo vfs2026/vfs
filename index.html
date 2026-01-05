@@ -313,6 +313,21 @@
          class="search"
          placeholder="ID or name"
          oninput="salaryFilter()">
+<label style="margin-left:12px">
+  <input type="checkbox" id="useSalaryJump">
+  Use Column
+</label>
+
+<select id="salaryJumpColumn" style="width:140px">
+  <option value="sal-monthlyAdvance">Advance</option>
+  <option value="sal-mess">Mess</option>
+  <option value="sal-uf">U/F</option>
+  <option value="sal-pf1">PF1</option>
+  <option value="sal-esi">ESI</option>
+  <option value="sal-pf">P/F</option>
+  <option value="sal-debit">Debit</option>
+  <option value="sal-jvc">JVC</option>
+</select>
 
   <div style="flex:1"></div>
   <button class="success" id="saveSalary">Save Salary Sheet</button>
@@ -325,7 +340,12 @@
             <table id="salaryTable"><thead><tr>
               <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
               <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-              <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Sign</th>
+              <th>Monthly Advance</th><th>Mess</th><th>U/F</th>
+<th>PF1</th>
+<th>ESI</th>
+<th>P/F</th>
+<th>Debit</th>
+<th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Sign</th>
             </tr></thead><tbody></tbody></table>
           </div>
           <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
@@ -1108,7 +1128,7 @@ const payload = {
   totalShift,
   totalAmt,
   monthlyAdvance,
-  mess, uf, pf, debit, jvc, other,
+  mess, uf,pf1,esi, pf, debit, jvc, other,
   paid,
   remarks,
   savedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1208,8 +1228,30 @@ async function renderSalarySheet(){
 
 <td><input class="sal-mess sal-editable" type="number" step="0.01" value="${mess.toFixed(2)}"></td>
 <td><input class="sal-uf sal-editable" type="number" step="0.01" value="${uf.toFixed(2)}"></td>
-<td><input class="sal-pf sal-editable" type="number" step="0.01" value="${pf.toFixed(2)}"></td>
+
+<td>
+  <input class="sal-pf1 sal-editable"
+         type="number"
+         step="0.01"
+         value="${Number(saved.pf1 || 0).toFixed(2)}">
+</td>
+
+<td>
+  <input class="sal-esi sal-editable"
+         type="number"
+         step="0.01"
+         value="${Number(saved.esi || 0).toFixed(2)}">
+</td>
+
+<td>
+  <input class="sal-pf readonly"
+         readonly
+         style="background:#f5f7fb;width:90px"
+         value="${pf.toFixed(2)}">
+</td>
+
 <td><input class="sal-debit sal-editable" type="number" step="0.01" value="${debit.toFixed(2)}"></td>
+
 <td><input class="sal-jvc sal-editable" type="number" step="0.01" value="${jvc.toFixed(2)}"></td>
 
 <td>
@@ -1236,20 +1278,42 @@ async function renderSalarySheet(){
 `;
 
 tbody.appendChild(tr);
-  // attach event listeners (recalculate whenever a relevant field changes)
- document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => {
-  inp.addEventListener('input', salaryInputsChanged);
+// --- ADD THIS BLOCK TO JUMP TO SEARCH BOX ---
+  document.querySelectorAll('#salaryTable input').forEach(el => {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault(); // Prevents the cursor from staying in the cell
 
-  /* ✅ AUTO SELECT TEXT ON FOCUS */
-  inp.addEventListener('focus', (e) => {
-    if (e.target.select) {
-      setTimeout(() => e.target.select(), 0);
-    }
+        // 1. Move focus back to the Salary Search box
+        const searchBox = document.getElementById('salarySearch');
+        if (searchBox) {
+          searchBox.focus();   
+          searchBox.select();  // Highlights the search text for easy re-typing
+        }
+      }
+    });
+  });
+  // attach event listeners (recalculate whenever a relevant field changes)
+document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => {
+
+  inp.addEventListener('input', (e) => {
+    salaryArrowNavigation = false; // ✅ USER EDIT CONFIRMED
+    salaryInputsChanged(e);
   });
 
-  if(inp.classList.contains('sal-editable')) {
-    inp.addEventListener('keydown', salaryCellKeyHandler);
-  }
+
+if(inp.classList.contains('sal-editable')) {
+
+  // 🔹 When user finishes editing number (ENTER / click / tab)
+inp.addEventListener('blur', (e) => {
+  salaryInputsChanged({ target: e.target });
+});
+
+
+  // keep arrow navigation if you want
+  inp.addEventListener('keydown', salaryCellKeyHandler);
+}
+
 });
 
   // Force a recalculation pass for every row so Paid column is guaranteed correct after "Show Salary"
@@ -1265,14 +1329,16 @@ tbody.appendChild(tr);
 
 /* Recalculate a single row's totals and update Paid (called on input and once after render) */
 function salaryInputsChanged(e){
-  const target = e.target;
-  const id = target?.dataset?.id;
-  if(!id) return;
+const target = e.target;
 
-  // find the row for this id
-  const row = Array.from(document.querySelectorAll('#salaryTable tbody tr'))
-    .find(tr => tr.querySelector('.sal-amt')?.dataset.id === id);
-  if(!row) return;
+// 🔑 ALWAYS get row first (works for all salary inputs)
+const row = target.closest('tr');
+if (!row) return;
+
+// 🔑 ID is stored ONLY on sal-amt
+const id = row.querySelector('.sal-amt')?.dataset?.id;
+if (!id) return;
+
 
   // read numeric inputs (tolerant parsing)
   const amtPerShift = Number(row.querySelector('.sal-amt').value) || 0;
@@ -1280,7 +1346,19 @@ function salaryInputsChanged(e){
   const monthlyAdvance = Number(row.querySelector('.sal-monthlyAdvance').value) || 0;
   const mess = Number(row.querySelector('.sal-mess').value) || 0;
   const uf = Number(row.querySelector('.sal-uf').value) || 0;
-  const pf = Number(row.querySelector('.sal-pf').value) || 0;
+ // 🔹 READ PF1 & ESI (new columns)
+const pf1 = Number(row.querySelector('.sal-pf1')?.value) || 0;
+const esi = Number(row.querySelector('.sal-esi')?.value) || 0;
+
+// 🔹 AUTO CALCULATE P/F
+const pf = pf1 + esi;
+
+// 🔹 WRITE BACK TO P/F COLUMN (readonly)
+const pfInput = row.querySelector('.sal-pf');
+if (pfInput) {
+  pfInput.value = pf.toFixed(2);
+}
+
   const debit = Number(row.querySelector('.sal-debit').value) || 0;
   const jvc = Number(row.querySelector('.sal-jvc').value) || 0;
   const other = Number(row.querySelector('.sal-other').value) || 0;
@@ -1621,8 +1699,12 @@ if(pageIndex === 0){
   <tr>
     <th>S.No</th><th>ID</th><th>Name</th>
     <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-    <th>Advance</th><th>Mess</th><th>U/F</th><th>P/F</th>
-    <th>Debit</th><th>JVC</th><th>Other</th>
+    <th>Advance</th><th>Mess</th><th>U/F</th>
+<th>PF1</th>
+<th>ESI</th>
+<th>P/F</th>
+<th>Debit</th>
+<th>JVC</th><th>Other</th>
     <th>Paid</th><th>A/c</th><th>Remark</th>
   </tr>
 </thead>` : ``}
@@ -2019,6 +2101,10 @@ auth.onAuthStateChanged(user => {
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
 function getDays(monthStr){ const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m); const arr=[]; for(let d=1; d<=n; d++) arr.push(d); return arr; }
 function getRateForLabour(id){ return 0; }
+// ===============================
+// Salary navigation state (REQUIRED)
+// ===============================
+let salaryArrowNavigation = false;
 
 /* Arrow key handler for attendance cells:
    - Arrow left/right moves within same row
@@ -2090,49 +2176,89 @@ if(e.key === 'Enter'){
 /* Arrow key handler for salary sheet cells:
    - Moves only between the cells with the class 'sal-editable'
 */
-function salaryCellKeyHandler(e){
+function salaryCellKeyHandler(e) {
   const el = e.target;
-  // Use a generalized selector for all editable/navigable elements within the table
-  const allEditable = Array.from(document.querySelectorAll('#salaryTable .sal-editable'));
-  const currentIdx = allEditable.indexOf(el);
+  if (!el.classList.contains('sal-editable')) return;
 
-  if(currentIdx === -1) return; // Should not happen if event listener is only on sal-editable
+  const row = el.closest('tr');
+  if (!row) return;
 
-  const tr = el.closest('tr');
-  if(!tr) return;
+  const allRows = Array.from(document.querySelectorAll('#salaryTable tbody tr'));
+  const rowIndex = allRows.indexOf(row);
 
-  const editableInRow = Array.from(tr.querySelectorAll('.sal-editable'));
-  const idxInRow = editableInRow.indexOf(el);
+  const cellsInRow = Array.from(row.querySelectorAll('.sal-editable'));
+  const colIndex = cellsInRow.indexOf(el);
+  if (colIndex === -1) return;
 
-  if(e.key === 'ArrowRight'){
+  // 👉 mark arrow navigation
+  if (
+    e.key === 'ArrowLeft' ||
+    e.key === 'ArrowRight' ||
+    e.key === 'ArrowUp' ||
+    e.key === 'ArrowDown'
+  ) {
+    salaryArrowNavigation = true;
+  }
+
+  // ➡️ RIGHT
+  if (e.key === 'ArrowRight') {
     e.preventDefault();
-    if(currentIdx < allEditable.length - 1) allEditable[currentIdx + 1].focus();
-  } else if(e.key === 'ArrowLeft'){
-    e.preventDefault();
-    if(currentIdx > 0) allEditable[currentIdx - 1].focus();
-  } else if(e.key === 'ArrowDown'){
-    e.preventDefault();
-    const rows = Array.from(document.querySelectorAll('#salaryTable tbody tr'));
-    const rIdx = rows.indexOf(tr);
-    if(rIdx < rows.length - 1){
-      const nextRow = rows[rIdx + 1];
-      const nextRowEditable = Array.from(nextRow.querySelectorAll('.sal-editable'));
-      // Find the element at the same column index (idxInRow) in the next row
-      const next = nextRowEditable[idxInRow];
-      if(next) next.focus();
-    }
-  } else if(e.key === 'ArrowUp'){
-    e.preventDefault();
-    const rows = Array.from(document.querySelectorAll('#salaryTable tbody tr'));
-    const rIdx = rows.indexOf(tr);
-    if(rIdx > 0){
-      const prevRow = rows[rIdx - 1];
-      const prevRowEditable = Array.from(prevRow.querySelectorAll('.sal-editable'));
-      // Find the element at the same column index (idxInRow) in the previous row
-      const prev = prevRowEditable[idxInRow];
-      if(prev) prev.focus();
+    if (colIndex < cellsInRow.length - 1) {
+      cellsInRow[colIndex + 1].focus();
+      cellsInRow[colIndex + 1].select();
     }
   }
+
+  // ⬅️ LEFT
+  else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (colIndex > 0) {
+      cellsInRow[colIndex - 1].focus();
+      cellsInRow[colIndex - 1].select();
+    }
+  }
+
+  // ⬇️ DOWN
+  else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (rowIndex < allRows.length - 1) {
+      const nextCell =
+        allRows[rowIndex + 1].querySelectorAll('.sal-editable')[colIndex];
+      if (nextCell) {
+        nextCell.focus();
+        nextCell.select();
+      }
+    }
+  }
+
+  // ⬆️ UP
+  else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (rowIndex > 0) {
+      const prevCell =
+        allRows[rowIndex - 1].querySelectorAll('.sal-editable')[colIndex];
+      if (prevCell) {
+        prevCell.focus();
+        prevCell.select();
+      }
+    }
+  }
+
+  // ✅ ENTER = FINAL CONFIRM → GO BACK TO SEARCH
+ else if (e.key === 'Enter') {
+  e.preventDefault();
+
+  salaryInputsChanged({ target: el });
+
+  const search = document.getElementById('salarySearch');
+  if (search) {
+    search.focus();
+    search.select();
+  }
+
+  salaryArrowNavigation = false; // reset
+}
+
 }
 
 
@@ -2254,11 +2380,41 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
     setTimeout(() => targetCell.select(), 0);
   }
 });
+// ===== ENTER in Salary search → jump to selected column =====
+document.getElementById('salarySearch').addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter') return;
+
+  e.preventDefault();
+
+  const useJump = document.getElementById('useSalaryJump').checked;
+  if (!useJump) return;
+
+  const colClass = document.getElementById('salaryJumpColumn').value;
+
+  // Find first visible salary row
+  const rows = Array.from(document.querySelectorAll('#salaryTable tbody tr'))
+    .filter(r => r.style.display !== 'none');
+
+  if (!rows.length) return;
+
+  const row = rows[0];
+  const targetInput = row.querySelector('.' + colClass);
+
+  if (targetInput) {
+    targetInput.focus();
+    setTimeout(() => targetInput.select(), 0); // ✅ AUTO SELECT
+  }
+});
+
 
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
+
+
 
 
 
