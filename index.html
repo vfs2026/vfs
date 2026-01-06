@@ -1115,15 +1115,20 @@ $('saveSalary').onclick = async ()=>{
     const monthlyAdvance = Number(tr.querySelector('.sal-monthlyAdvance').value) || 0; // Read calculated value (from advances)
     const mess = Number(tr.querySelector('.sal-mess').value) || 0;
     const uf = Number(tr.querySelector('.sal-uf').value) || 0;
-    const pf = Number(tr.querySelector('.sal-pf').value) || 0;
-    const debit = Number(tr.querySelector('.sal-debit').value) || 0;
-    const jvc = Number(tr.querySelector('.sal-jvc').value) || 0;
-    const other = Number(tr.querySelector('.sal-other').value) || 0;
+  const pf1 = Number(tr.querySelector('.sal-pf1')?.value) || 0;
+const esi = Number(tr.querySelector('.sal-esi')?.value) || 0;
+const pf  = Number(tr.querySelector('.sal-pf')?.value) || 0;
+
+const debit = Number(tr.querySelector('.sal-debit')?.value) || 0;
+const jvc   = Number(tr.querySelector('.sal-jvc')?.value) || 0;
+const other = Number(tr.querySelector('.sal-other')?.value) || 0;
+
     const paid = Number(tr.querySelector('.sal-paid').value) || 0; // Read user-overridden or calculated Paid
     const remarks = tr.querySelector('.sal-remarks').value || '';
 const payload = {
   amtPerShift: Number(tr.querySelector('.sal-amt').value),   // ✅ CRITICAL
-  paymentMode: tr.children[12].querySelector('input').value, // ✅ CRITICAL
+paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
+ // ✅ CRITICAL
 
   totalShift,
   totalAmt,
@@ -1513,8 +1518,8 @@ async function collectSalaryForMonth(month){
       jvc: tr.querySelector('.sal-jvc').value,
       other: tr.querySelector('.sal-other').value,
 
-      // ✅ FIXED INDEX
-      paymentMode: tr.children[12].querySelector('input').value,
+   paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
+
 
       paidSalary: tr.querySelector('.sal-paid').value,
       remarks: tr.querySelector('.sal-remarks').value
@@ -1557,8 +1562,27 @@ const orderedRows = [...acRows, ...cashRows];
 
   let html = '<table border="1"><tr>' + header.map(h=>`<th>${h}</th>`).join('') + '</tr>';
   rows.forEach(r => {
-    html += `<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paidSalary}</td><td>${r.remarks}</td></tr>`;
-  });
+  html += `
+<tr>
+<td>${r.sno}</td>
+<td>${r.id}</td>
+<td>${r.name}</td>
+<td>${r.amtPerShift}</td>
+<td>${r.totalShift}</td>
+<td>${r.totalAmt}</td>
+<td>${r.monthlyAdvance}</td>
+<td>${r.mess}</td>
+<td>${r.uf}</td>
+<td>${r.pf}</td>        <!-- ✅ PF ONLY -->
+<td>${r.debit}</td>
+<td>${r.jvc}</td>
+<td>${r.other}</td>
+<td>${r.paymentMode}</td>
+<td>${r.paidSalary}</td>
+<td>${r.remarks}</td>
+</tr>`;
+});
+
   html += '</table>';
   downloadBlob('\uFEFF'+html, `salary_sheet_${month}.xls`, 'application/vnd.ms-excel');
 }
@@ -1651,8 +1675,7 @@ th:nth-child(4),  td:nth-child(4)  { width: 55px; }
 th:nth-child(5),  td:nth-child(5)  { width: 55px; }
 th:nth-child(6),  td:nth-child(6)  { width: 60px; }
 th:nth-child(7),  td:nth-child(7)  { width: 45px; }
-th:nth-child(8),  td:nth-child(8)  { width: 45px; }
-th:nth-child(9),  td:nth-child(9)  { width: 45px; }
+
 th:nth-child(10), td:nth-child(10) { width: 45px; }
 th:nth-child(11), td:nth-child(11) { width: 45px; }
 th:nth-child(12), td:nth-child(12) { width: 45px; }
@@ -1700,8 +1723,7 @@ if(pageIndex === 0){
     <th>S.No</th><th>ID</th><th>Name</th>
     <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
     <th>Advance</th><th>Mess</th><th>U/F</th>
-<th>PF1</th>
-<th>ESI</th>
+
 <th>P/F</th>
 <th>Debit</th>
 <th>JVC</th><th>Other</th>
@@ -2411,6 +2433,10 @@ document.getElementById('salarySearch').addEventListener('keydown', function (e)
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
+
+
 
 
 
