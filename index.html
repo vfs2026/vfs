@@ -1606,6 +1606,23 @@ async function exportSalaryPDF(){
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
 const cashRows = rows.filter(r => r.paymentMode !== 'A/c');
 const orderedRows = [...acRows, ...cashRows];
+// ===============================
+// 🔢 TOTAL PAID CALCULATION (PDF ONLY)
+// ===============================
+let totalAcPaid = 0;
+let totalCashPaid = 0;
+
+orderedRows.forEach(r => {
+  const paid = Number(r.paidSalary) || 0;
+
+  if (r.paymentMode === 'A/c') {
+    totalAcPaid += paid;
+  } else {
+    totalCashPaid += paid;
+  }
+});
+
+const grandTotal = totalAcPaid + totalCashPaid;
 
   if(rows.length === 0){
     alert('No salary data');
@@ -1636,23 +1653,27 @@ html, body {
 
 /* WRAPPER TO CONTROL POSITION */
 .page {
-  width: 297mm;           /* A4 landscape width */
-  height: 210mm;          /* A4 landscape height */
-  padding: 4mm 2mm 2mm 2mm;  /* top right bottom left */
+  width: 297mm;
+  height: 210mm;
+  padding: 6mm;
   box-sizing: border-box;
+
+  /* ✅ CENTER FIX */
+  margin: 0 auto;
+
+  /* REMOVE SCALE SHIFT */
+  transform: none;
 }
 
-/* TABLE */
+
 table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-margin-top: 6px;
-
-  font-size: 8.3px;       /* 🔑 slightly smaller */
-  transform: scale(0.986); /* 🔑 shrink to avoid cut */
-  transform-origin: top left;
+  margin: 6px auto 0 auto;  /* ✅ CENTER TABLE */
+  font-size: 9.5px;
 }
+
 
 th, td {
   border: 1px solid #000;
@@ -1698,21 +1719,40 @@ pages.forEach((pageRows, pageIndex) => {
 
 if(pageIndex === 0){
   html += `
-  <div style="
-    text-align:center;
-    font-weight:bold;
-    margin-bottom:6px;
-  ">
+  <div style="text-align:center; font-weight:bold; margin-bottom:6px;">
     <div style="font-size:18px; letter-spacing:1px;">
       VEERANAR FINISHERS
     </div>
     <div style="font-size:14px; margin-top:4px;">
       MONTHLY SALARY ${formatMonthName(month)}
-
     </div>
   </div>
+
+  <!-- 🔢 TOTAL SUMMARY (PDF ONLY) -->
+<div style="
+  display:flex;
+  align-items:center;
+  font-size:11px;
+  margin:6px 0 8px 0;
+  padding:6px;
+  border:1px solid #000;
+">
+  <div style="flex:1; text-align:left;">
+    <strong>A/c Paid :</strong> ₹${totalAcPaid.toFixed(2)}
+  </div>
+
+  <div style="flex:1; text-align:center;">
+    <strong>Cash Paid :</strong> ₹${totalCashPaid.toFixed(2)}
+  </div>
+
+  <div style="flex:1; text-align:right; padding-right:60px;">
+    <strong>Total Paid :</strong> ₹${grandTotal.toFixed(2)}
+  </div>
+</div>
+
   `;
 }
+
 
   html += `
   <div class="page">
@@ -1771,12 +1811,15 @@ html2pdf()
     margin: [8, 8, 8, 8],
     filename: `salary_sheet_${month}.pdf`,
     jsPDF: { orientation: 'landscape', format: 'a4', unit: 'mm' },
-    html2canvas: {
-      scale: 1.3,        /* 🔑 DO NOT USE 2 */
-      scrollX: 0,
-      scrollY: 0,
-      windowWidth: 1400  /* 🔑 Forces full table render */
-    }
+  html2canvas: {
+  scale: 2,                // 🔑 HIGH DPI
+  scrollX: 0,
+  scrollY: 0,
+  windowWidth: 1600,
+  letterRendering: true,
+  useCORS: true
+}
+
   })
     .save()
     .then(() => div.remove());
@@ -2433,6 +2476,8 @@ document.getElementById('salarySearch').addEventListener('keydown', function (e)
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
 
 
 
