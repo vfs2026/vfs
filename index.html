@@ -1613,13 +1613,17 @@ let totalAcPaid = 0;
 let totalCashPaid = 0;
 
 orderedRows.forEach(r => {
-  const paid = Number(r.paidSalary) || 0;
+  const paidRaw = Number(r.paidSalary) || 0;
 
+// ✅ ADD ONLY IF POSITIVE
+if (paidRaw > 0) {
   if (r.paymentMode === 'A/c') {
-    totalAcPaid += paid;
+    totalAcPaid += paidRaw;
   } else {
-    totalCashPaid += paid;
+    totalCashPaid += paidRaw;
   }
+}
+
 });
 
 const grandTotal = totalAcPaid + totalCashPaid;
