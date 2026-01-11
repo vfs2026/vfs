@@ -1793,43 +1793,27 @@ th:nth-child(16), td:nth-child(16) { width: 150px; text-align:left; }
 pages.forEach((pageRows, pageIndex) => {
 
 if(pageIndex === 0){
-  html += `
-  <div style="text-align:center; font-weight:bold; margin-bottom:6px;">
-    <div style="font-size:18px; letter-spacing:1px;">
-      VEERANAR FINISHERS
+  pageHeader = `
+    <div style="text-align:center; font-weight:bold; margin-bottom:6px;">
+      <div style="font-size:18px;">VEERANAR FINISHERS</div>
+      <div style="font-size:14px;">MONTHLY SALARY ${formatMonthName(month)}</div>
     </div>
-    <div style="font-size:14px; margin-top:4px;">
-      MONTHLY SALARY ${formatMonthName(month)}
+
+    <div style="
+      display:flex;
+      font-size:11px;
+      margin:6px 0 8px 0;
+      padding:6px;
+      border:1px solid #000;
+    ">
+      <div style="flex:1;">A/c Paid : ₹${totalAcPaid.toFixed(2)}</div>
+      <div style="flex:1; text-align:center;">Within A/c Paid : ₹${totalWithinAcPaid.toFixed(2)}</div>
+      <div style="flex:1; text-align:center;">Cash Paid : ₹${totalCashPaid.toFixed(2)}</div>
+      <div style="flex:1; text-align:right;">Total Paid : ₹${grandTotal.toFixed(2)}</div>
     </div>
-  </div>
-
-  <!-- 🔢 TOTAL SUMMARY (PDF ONLY) -->
-<div style="
-  display:flex;
-  align-items:center;
-  font-size:11px;
-  margin:6px 0 8px 0;
-  padding:6px;
-  border:1px solid #000;
-">
-  <div style="flex:1; text-align:left;">
-    <strong>A/c Paid :</strong> ₹${totalAcPaid.toFixed(2)}
-  </div>
-<div style="flex:1; text-align:center;">
-  <strong>Within A/c Paid :</strong> ₹${totalWithinAcPaid.toFixed(2)}
-</div>
-
-  <div style="flex:1; text-align:center;">
-    <strong>Cash Paid :</strong> ₹${totalCashPaid.toFixed(2)}
-  </div>
-
-  <div style="flex:1; text-align:right; padding-right:60px;">
-    <strong>Total Paid :</strong> ₹${grandTotal.toFixed(2)}
-  </div>
-</div>
-
   `;
 }
+
 
 
   html += `
