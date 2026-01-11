@@ -1888,14 +1888,16 @@ html2pdf()
   .set({
     margin: [8, 8, 8, 8],
     filename: `salary_sheet_${month}.pdf`,
-    jsPDF: { orientation: 'landscape', format: 'a4', unit: 'mm' },
-  html2canvas: {
-  scale: 2,                // 🔑 HIGH DPI
+    jsPDF: { orientation: 'landscape', format: 'a4', unit: 'mm' },html2canvas: {
+  scale: 2,
   scrollX: 0,
   scrollY: 0,
+
+  /* ✅ FORCE DESKTOP VIEW ONLY FOR MOBILE */
   windowWidth: 1600,
-  letterRendering: true,
-  useCORS: true
+
+  useCORS: true,
+  backgroundColor: '#ffffff'
 }
 
   })
@@ -2554,7 +2556,6 @@ document.getElementById('salarySearch').addEventListener('keydown', function (e)
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
