@@ -1732,12 +1732,12 @@ html, body {
   height: 210mm;
   padding: 6mm;
   box-sizing: border-box;
-
-  /* ✅ CENTER FIX */
   margin: 0 auto;
 
-  /* REMOVE SCALE SHIFT */
-  transform: none;
+  /* ✅ MOBILE VISUAL FIX */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 
@@ -1745,7 +1745,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  margin: 6px auto 0 auto;  /* ✅ CENTER TABLE */
+margin: 0 auto;
   font-size: 9.5px;
 }
 
