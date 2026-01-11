@@ -335,6 +335,16 @@
   <button id="exportSalaryXLS">Export XLS</button>
   <button id="exportSalaryPDF">Export PDF</button>
 </div>
+<div id="salaryTotalsBox"
+     style="margin-top:8px;margin-bottom:6px;
+            padding:10px;
+            border:2px solid #0b79ff;
+            border-radius:8px;
+            font-weight:bold;
+            background:#f3f8ff;
+            display:flex;
+            gap:20px;">
+</div>
 
           <div class="table-wrap" style="margin-top:10px">
             <table id="salaryTable"><thead><tr>
@@ -395,10 +405,12 @@
     <label>Password</label><input id="modalPwd"><br>
     <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0" step="0.01"><br>
     <label>Payment Mode</label>
-    <select id="modalPayMode" style="width:120px">
-      <option value="Cash">Cash</option>
-      <option value="A/c">A/c</option>
-    </select>
+   <select id="modalPayMode" style="width:140px">
+  <option value="Cash">Cash</option>
+  <option value="A/c">A/c</option>
+  <option value="Within A/c">Within A/c</option>
+</select>
+
     <div style="margin-top:10px">
       <button class="btn" id="saveLabourBtn">Save</button>
       <button id="cancelLabourBtn">Cancel</button>
@@ -814,6 +826,19 @@ el.addEventListener('blur', () => {
   if(scrollToTop) scrollToElement($('ownerTableWrap'));
 }
 $('loadTable').onclick = generateOwnerTable;
+// ===============================
+// 🔁 SYNC MONTH: Attendance → Salary & Advances
+// ===============================
+$('ownerMonth').addEventListener('change', () => {
+  const month = $('ownerMonth').value;
+
+  if (month) {
+    // Sync to Salary & Advances
+    $('salaryMonth').value = month;
+    $('advMonth').value = month;
+  }
+});
+
 function updateRowTotals(){
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
     let s = 0;
@@ -1162,9 +1187,19 @@ async function renderSalarySheet(){
   const month = $('salaryMonth').value || $('ownerMonth').value;
   if(!month){ alert('Select month'); return; }
 
-  const labs = await fetchAllLabours();
+const labs = (await fetchAllLabours()).sort((a, b) =>
+  ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[a.paymentMode] || 9) -
+  ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[b.paymentMode] || 9)
+);
+
   const tbody = document.querySelector('#salaryTable tbody');
   tbody.innerHTML = '';
+// ===============================
+// 🔢 PAYMENT MODE TOTALS (UI)
+// ===============================
+let totalAc = 0;
+let totalWithinAc = 0;
+let totalCash = 0;
 
   for(let i=0;i<labs.length;i++){
     const l = labs[i];
@@ -1194,6 +1229,28 @@ async function renderSalarySheet(){
   - jvc
   - other
 );
+// ✅ ADD TO PAYMENT MODE TOTALS
+if (paidToShow > 0) {
+  if (l.paymentMode === 'A/c') {
+    totalAc += paidToShow;
+  } else if (l.paymentMode === 'Within A/c') {
+    totalWithinAc += paidToShow;
+  } else {
+    totalCash += paidToShow;
+  }
+}
+const box = document.getElementById('salaryTotalsBox');
+
+if (box) {
+  const grandTotal = totalAc + totalWithinAc + totalCash;
+
+  box.innerHTML =
+    '<div>A/c Total : ₹ ' + totalAc.toFixed(2) + '</div>' +
+    '<div>Within A/c Total : ₹ ' + totalWithinAc.toFixed(2) + '</div>' +
+    '<div>Cash Total : ₹ ' + totalCash.toFixed(2) + '</div>' +
+    '<hr style="margin:6px 0">' +
+    '<div style="font-size:16px">GRAND TOTAL : ₹ ' + grandTotal.toFixed(2) + '</div>';
+}
 
     const tr = document.createElement('tr');
    tr.innerHTML = `
@@ -1537,8 +1594,11 @@ async function exportSalaryCSV(){
   const rows = await collectSalaryForMonth(month);
 // 🔁 ORDER: A/c FIRST, Cash AFTER
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
-const cashRows = rows.filter(r => r.paymentMode !== 'A/c');
-const orderedRows = [...acRows, ...cashRows];
+const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
+const cashRows = rows.filter(r => r.paymentMode === 'Cash');
+
+const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
+
 
   const header = ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks/Sign'];
 
@@ -1555,8 +1615,11 @@ async function exportSalaryXLS(){
   const rows = await collectSalaryForMonth(month);
 // 🔁 ORDER: A/c FIRST, Cash AFTER
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
-const cashRows = rows.filter(r => r.paymentMode !== 'A/c');
-const orderedRows = [...acRows, ...cashRows];
+const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
+const cashRows = rows.filter(r => r.paymentMode === 'Cash');
+
+const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
+
 
   const header = ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks/Sign'];
 
@@ -1604,13 +1667,17 @@ async function exportSalaryPDF(){
   const rows = await collectSalaryForMonth(month);
 // 🔁 ORDER: A/c FIRST, Cash AFTER
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
-const cashRows = rows.filter(r => r.paymentMode !== 'A/c');
-const orderedRows = [...acRows, ...cashRows];
+const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
+const cashRows = rows.filter(r => r.paymentMode === 'Cash');
+
+const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
+
 // ===============================
 // 🔢 TOTAL PAID CALCULATION (PDF ONLY)
 // ===============================
 let totalAcPaid = 0;
 let totalCashPaid = 0;
+let totalWithinAcPaid = 0;
 
 orderedRows.forEach(r => {
   const paidRaw = Number(r.paidSalary) || 0;
@@ -1619,14 +1686,18 @@ orderedRows.forEach(r => {
 if (paidRaw > 0) {
   if (r.paymentMode === 'A/c') {
     totalAcPaid += paidRaw;
+  } else if (r.paymentMode === 'Within A/c') {
+    totalWithinAcPaid += paidRaw;
   } else {
     totalCashPaid += paidRaw;
   }
 }
 
-});
 
-const grandTotal = totalAcPaid + totalCashPaid;
+});
+const grandTotal =
+  totalAcPaid + totalWithinAcPaid + totalCashPaid;
+
 
   if(rows.length === 0){
     alert('No salary data');
@@ -1744,6 +1815,9 @@ if(pageIndex === 0){
   <div style="flex:1; text-align:left;">
     <strong>A/c Paid :</strong> ₹${totalAcPaid.toFixed(2)}
   </div>
+<div style="flex:1; text-align:center;">
+  <strong>Within A/c Paid :</strong> ₹${totalWithinAcPaid.toFixed(2)}
+</div>
 
   <div style="flex:1; text-align:center;">
     <strong>Cash Paid :</strong> ₹${totalCashPaid.toFixed(2)}
@@ -2480,7 +2554,6 @@ document.getElementById('salarySearch').addEventListener('keydown', function (e)
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
