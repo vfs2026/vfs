@@ -355,7 +355,7 @@
 <th>ESI</th>
 <th>P/F</th>
 <th>Debit</th>
-<th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Sign</th>
+<th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Exclude</th><th>Remarks/Sign</th>
             </tr></thead><tbody></tbody></table>
           </div>
           <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
@@ -768,7 +768,19 @@ html += `
 });
     html += `<td class="rowTotal">${Number(total).toFixed(2)}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}')">View</button></td></tr>`;
   });
-  html += '</tbody></table>';
+html += `
+</tbody>
+<tfoot>
+  <tr id="attendanceCountRow">
+    <td class="sticky-id"></td>
+    <td class="sticky-name"><strong>ATTENDED COUNT</strong></td>
+    ${days.map(d => `<td class="att-count" data-day="${d}">0</td>`).join('')}
+    <td></td>
+    <td></td>
+  </tr>
+</tfoot>
+</table>`;
+
   $('ownerTableWrap').innerHTML = html;
 
   // add behavior: auto-select text on focus & arrow navigation & ensure focused input sits above sticky columns
@@ -787,7 +799,30 @@ html += `
 });
 
     el.addEventListener('input', () => {
-  updateRowTotals();   // 🔑 INSTANT UPDATE
+  updateRowTotals(); 
+updateAttendanceCounts();
+
+function updateAttendanceCounts() {
+  const countMap = {};
+
+  document.querySelectorAll('.attCell').forEach(cell => {
+    const day = cell.dataset.day;
+    const val = cell.value.trim().toUpperCase();
+
+    if (!countMap[day]) countMap[day] = 0;
+
+    // ✅ Count only if attended (> 0)
+    if (val !== 'A' && Number(val) > 0) {
+      countMap[day]++;
+    }
+  });
+
+  document.querySelectorAll('.att-count').forEach(td => {
+    const day = td.dataset.day;
+    td.textContent = countMap[day] || 0;
+  });
+}
+  // 🔑 INSTANT UPDATE
 });
 el.addEventListener('blur', (ev) => {
       ev.target.style.zIndex = '';
@@ -1154,6 +1189,7 @@ const payload = {
   amtPerShift: Number(tr.querySelector('.sal-amt').value),   // ✅ CRITICAL
 paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
  // ✅ CRITICAL
+excludeFromExport: tr.querySelector('.sal-exclude')?.checked || false,
 
   totalShift,
   totalAmt,
@@ -1229,8 +1265,47 @@ let totalCash = 0;
   - jvc
   - other
 );
+function recalcSalaryTotals() {
+  let totalAc = 0;
+  let totalWithinAc = 0;
+  let totalCash = 0;
+
+  document.querySelectorAll('#salaryTable tbody tr').forEach(tr => {
+    const isExcluded = tr.querySelector('.sal-exclude')?.checked;
+    if (isExcluded) return;   // 🚫 ignore excluded row
+
+    const paid = Number(tr.querySelector('.sal-paid')?.value) || 0;
+    if (paid <= 0) return;
+
+    const mode =
+      tr.querySelector('td:nth-child(15) input')?.value || 'Cash';
+
+    if (mode === 'A/c') totalAc += paid;
+    else if (mode === 'Within A/c') totalWithinAc += paid;
+    else totalCash += paid;
+  });
+
+  const box = document.getElementById('salaryTotalsBox');
+  if (!box) return;
+
+  const grandTotal = totalAc + totalWithinAc + totalCash;
+
+  box.innerHTML = `
+    <div>A/c Total : ₹ ${totalAc.toFixed(2)}</div>
+    <div>Within A/c Total : ₹ ${totalWithinAc.toFixed(2)}</div>
+    <div>Cash Total : ₹ ${totalCash.toFixed(2)}</div>
+    <hr style="margin:6px 0">
+    <div style="font-size:16px">
+      GRAND TOTAL : ₹ ${grandTotal.toFixed(2)}
+    </div>
+  `;
+}
+
 // ✅ ADD TO PAYMENT MODE TOTALS
-if (paidToShow > 0) {
+const isExcluded =
+  saved.excludeFromExport === true;
+
+if (!isExcluded && paidToShow > 0) {
   if (l.paymentMode === 'A/c') {
     totalAc += paidToShow;
   } else if (l.paymentMode === 'Within A/c') {
@@ -1239,6 +1314,7 @@ if (paidToShow > 0) {
     totalCash += paidToShow;
   }
 }
+
 const box = document.getElementById('salaryTotalsBox');
 
 if (box) {
@@ -1336,10 +1412,26 @@ if (box) {
          style="width:110px;background:#f5f7fb">
 </td>
 
-<td><input class="sal-remarks sal-editable" value="${saved.remarks || ''}"></td>
+<td>
+  <input type="checkbox"
+         class="sal-exclude"
+         ${saved.excludeFromExport ? 'checked' : ''}>
+</td>
+
+<td>
+  <input class="sal-remarks sal-editable"
+         value="${saved.remarks || ''}">
+</td>
+
 `;
 
 tbody.appendChild(tr);
+// 🔁 Recalculate totals when Exclude checkbox is toggled
+const excludeBox = tr.querySelector('.sal-exclude');
+if (excludeBox) {
+  excludeBox.addEventListener('change', recalcSalaryTotals);
+}
+
 // --- ADD THIS BLOCK TO JUMP TO SEARCH BOX ---
   document.querySelectorAll('#salaryTable input').forEach(el => {
     el.addEventListener('keydown', (e) => {
@@ -1362,6 +1454,7 @@ document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp
     salaryArrowNavigation = false; // ✅ USER EDIT CONFIRMED
     salaryInputsChanged(e);
   });
+
 
 
 if(inp.classList.contains('sal-editable')) {
@@ -1387,6 +1480,7 @@ inp.addEventListener('blur', (e) => {
     }
   });
   scrollToElement($('salaryCard'));
+recalcSalaryTotals();
 }
 
 /* Recalculate a single row's totals and update Paid (called on input and once after render) */
@@ -1557,6 +1651,9 @@ async function collectSalaryForMonth(month){
   const trs = document.querySelectorAll('#salaryTable tbody tr');
 
   trs.forEach((tr, i) => {
+    const isExcluded = tr.querySelector('.sal-exclude')?.checked;
+    if (isExcluded) return; // 🚫 skip export
+
     const nameCell = tr.querySelector('.sticky-name')?.textContent || '';
     const parts = nameCell.split(' - ');
 
@@ -1574,10 +1671,7 @@ async function collectSalaryForMonth(month){
       debit: tr.querySelector('.sal-debit').value,
       jvc: tr.querySelector('.sal-jvc').value,
       other: tr.querySelector('.sal-other').value,
-
-   paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
-
-
+      paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
       paidSalary: tr.querySelector('.sal-paid').value,
       remarks: tr.querySelector('.sal-remarks').value
     });
@@ -1585,7 +1679,6 @@ async function collectSalaryForMonth(month){
 
   return rows;
 }
-
 
 
 /* Salary Export Functions (IMPLEMENTED) */
@@ -2554,6 +2647,10 @@ document.getElementById('salarySearch').addEventListener('keydown', function (e)
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
+
+
 
 
 
