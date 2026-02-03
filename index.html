@@ -8,6 +8,8 @@
 
 <link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="8" ry="8" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="55%" font-size="28" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>'>
 
+
+
 <style>
   :root{--sticky-id:100px;--sticky-name:260px}
   body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;color:#222}
@@ -241,11 +243,18 @@
           <label>Search</label>
           <input id="ownerSearch" class="search" placeholder="ID or name" oninput="ownerFilter()">
           <button class="success" id="saveAll">Save Shifts</button>
+<button id="shortlistHalfShift">Shortlist ½/1/2/2.5 Shift</button>
+
           <button id="exportShiftCSV">Export CSV</button>
           <button id="exportShiftXLS">Export XLS</button>
           <button id="exportShiftPDF">Export PDF</button>
         </div>
         <div id="ownerTableWrap" class="table-wrap card"></div>
+<div id="shortlistResult" class="card hidden" style="margin-top:12px">
+  <h3>Half / One Shift Shortlist</h3>
+  <div id="shortlistTable"></div>
+</div>
+
     </div>
 
 <label style="margin-left:8px">
@@ -424,6 +433,45 @@
 
 <script>
 function parseAttendance(ci){
+// ===============================
+// ⏱️ PRESENT TIME (8.30AM → 4.30 HRS)
+// ===============================
+function calcPresentTime(inTime, outTime) {
+  if (!inTime || !outTime) return '--';
+
+  function toMinutes(t) {
+    t = t.trim().toUpperCase().replace(/\s+/g, '');
+
+    const m = t.match(/^(\d{1,2})\.(\d{2})(AM|PM)$/);
+    if (!m) return null;
+
+    let h = Number(m[1]);
+    const min = Number(m[2]);
+    const ap = m[3];
+
+    if (h < 1 || h > 12 || min > 59) return null;
+
+    if (ap === 'PM' && h !== 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+
+    return h * 60 + min;
+  }
+
+  const inMin = toMinutes(inTime);
+  const outMin = toMinutes(outTime);
+  if (inMin === null || outMin === null || outMin <= inMin) return '--';
+
+  const diff = outMin - inMin;
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+
+  const mm = Math.round((m / 60) * 100)
+    .toString()
+    .padStart(2, '0');
+
+  return `${h}.${mm} HRS`;
+}
+
   const val = ci.value.trim().toUpperCase();
 
   if(val === 'A'){
@@ -519,6 +567,8 @@ $('ownerLogout').onclick = async ()=>{ await auth.signOut(); location.reload(); 
 
 /* ===== Labour login (ID only) ===== */
 let currentLabour = null;
+
+
 $('labourLoginBtn').onclick = async ()=>{
   const id = $('labUserId').value.trim();
   if(!id){ alert('Enter your User ID'); return; }
@@ -725,6 +775,16 @@ async function initOwnerView(){
   // Generate the table now that the month is set
   await generateOwnerTable(); 
 }
+// 🔗 CLICK HANDLER FOR LABOUR ID (OWNER → LABOUR PORTAL)
+document.addEventListener('click', function (e) {
+  const el = e.target.closest('.labour-id-link');
+  if (!el) return;
+
+  const labId = el.dataset.labid;
+  if (!labId) return;
+
+  openLabourFromOwner(labId);
+});
 
 /* Generate owner attendance table (pulls attendance docs from Firestore) */
 async function generateOwnerTable(scrollToTop = true){
@@ -748,6 +808,7 @@ async function generateOwnerTable(scrollToTop = true){
     const rec = attMap[l.id] || {shifts:{}, rate:l.rate};
     let total = 0;
     html += `<tr data-id="${l.id}"><td class="sticky-id">${i+1}</td><td class="sticky-name">${l.id} - ${l.name}</td>`;
+
     days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; const isAbsent = Number(v) === 0;
 const displayVal = isAbsent ? 'A' : v;
 
@@ -874,16 +935,134 @@ $('ownerMonth').addEventListener('change', () => {
   }
 });
 
-function updateRowTotals(){
-  document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
-    let s = 0;
-    tr.querySelectorAll('.attCell').forEach(ci=>{
-      s += parseAttendance(ci);
+
+// ===============================
+// 🔍 SHORTLIST HALF / ONE SHIFT
+// ===============================
+$('shortlistHalfShift').onclick = () => {
+  const month = $('ownerMonth').value;
+  if (!month) {
+    alert('Select month first');
+    return;
+  }
+
+  const rows = [];
+  const days = getDays(month);
+
+  document.querySelectorAll('#ownerTable tbody tr').forEach(tr => {
+    const labId = tr.dataset.id;
+
+    const nameText =
+      tr.querySelector('.sticky-name')?.textContent || '';
+    const name = nameText.split('-').slice(1).join('-').trim();
+
+    tr.querySelectorAll('.attCell').forEach(cell => {
+      const day = cell.dataset.day;
+      const val = cell.value.trim().toUpperCase();
+
+     // ✅ ONLY 0.5 AND 2 SHIFT
+if (val === '0.5' || val === '2') {
+
+
+     rows.push({
+  id: labId,
+  date: `${month}-${String(day).padStart(2, '0')}`,
+  name,
+  inTime: '',   // 👈 editable
+  outTime: '',  // 👈 editable
+  shift: val
+});
+
+      }
     });
-    const cell = tr.querySelector('.rowTotal');
-    if(cell) cell.textContent = s.toFixed(2);
   });
-}
+// 🔃 SORT BY DATE (ASCENDING), THEN BY ID
+rows.sort((a, b) => {
+  if (a.date !== b.date) {
+    return a.date.localeCompare(b.date); // date wise
+  }
+  return a.id.localeCompare(b.id);       // same date → ID wise
+});
+
+  if (!rows.length) {
+    $('shortlistTable').innerHTML =
+      '<p class="small muted">No half or one shift entries found.</p>';
+  } else {
+  let html = `
+  <table>
+    <thead>
+      <tr>
+        <th>User ID</th>
+        <th>Date</th>
+        <th>Name</th>
+        <th>IN</th>
+        <th>OUT</th>
+        <th>Shift</th>
+<th>Present</th>
+
+      </tr>
+    </thead>
+    <tbody>
+`;
+
+rows.forEach((r) => {
+  html += `
+    <tr>
+      <td>${r.id}</td>
+      <td>${r.date}</td>
+      <td class="left">${r.name}</td>
+
+     <td>
+  <input type="text"
+         placeholder="8.30AM"
+         data-role="in"
+         style="width:80px">
+</td>
+
+<td>
+  <input type="text"
+         placeholder="1.00PM"
+         data-role="out"
+         style="width:80px">
+</td>
+
+
+      <td><strong>${r.shift}</strong></td>
+      <td class="presentCol">--</td>
+    </tr>
+  `;
+});
+
+    html += '</tbody></table>';
+    $('shortlistTable').innerHTML = html;
+// ===============================
+// 🔴 LIVE PRESENT CALC (SHORTLIST ONLY)
+// ===============================
+document
+  .querySelectorAll('#shortlistTable input[data-role]')
+  .forEach(inp => {
+    inp.addEventListener('input', () => {
+      const tr = inp.closest('tr');
+      if (!tr) return;
+
+      const inVal =
+        tr.querySelector('input[data-role="in"]')?.value || '';
+      const outVal =
+        tr.querySelector('input[data-role="out"]')?.value || '';
+
+      const cell = tr.querySelector('.presentCol');
+      if (!cell) return;
+
+      cell.textContent =
+        calcPresentTime(inVal, outVal) || '--';
+    });
+  });
+
+  }
+
+  $('shortlistResult').classList.remove('hidden');
+  scrollToElement($('shortlistResult'));
+};
 
 
 /* Save attendance to Firestore (owner-only) */
@@ -2643,10 +2822,12 @@ document.getElementById('salarySearch').addEventListener('keydown', function (e)
 });
 
 
+
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
 
 
 
