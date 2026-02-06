@@ -9,7 +9,7 @@
 <link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect rx="8" ry="8" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="55%" font-size="28" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>'>
 
 <style>
- 
+  :root{--sticky-id:100px;--sticky-name:260px}
   body{font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;color:#222}
   .wrap{max-width:1200px;margin:18px auto;padding:14px}
   .card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 6px 20px rgba(20,20,40,0.05)}
@@ -313,21 +313,6 @@
          class="search"
          placeholder="ID or name"
          oninput="salaryFilter()">
-<label style="margin-left:12px">
-  <input type="checkbox" id="useSalaryJump">
-  Use Column
-</label>
-
-<select id="salaryJumpColumn" style="width:140px">
-  <option value="sal-monthlyAdvance">Advance</option>
-  <option value="sal-mess">Mess</option>
-  <option value="sal-uf">U/F</option>
-  <option value="sal-pf1">PF1</option>
-  <option value="sal-esi">ESI</option>
-  <option value="sal-pf">P/F</option>
-  <option value="sal-debit">Debit</option>
-  <option value="sal-jvc">JVC</option>
-</select>
 
   <div style="flex:1"></div>
   <button class="success" id="saveSalary">Save Salary Sheet</button>
@@ -335,27 +320,12 @@
   <button id="exportSalaryXLS">Export XLS</button>
   <button id="exportSalaryPDF">Export PDF</button>
 </div>
-<div id="salaryTotalsBox"
-     style="margin-top:8px;margin-bottom:6px;
-            padding:10px;
-            border:2px solid #0b79ff;
-            border-radius:8px;
-            font-weight:bold;
-            background:#f3f8ff;
-            display:flex;
-            gap:20px;">
-</div>
 
           <div class="table-wrap" style="margin-top:10px">
             <table id="salaryTable"><thead><tr>
               <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
               <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-              <th>Monthly Advance</th><th>Mess</th><th>U/F</th>
-<th>PF1</th>
-<th>ESI</th>
-<th>P/F</th>
-<th>Debit</th>
-<th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Exclude</th><th>Remarks/Sign</th>
+              <th>Monthly Advance</th><th>Mess</th><th>U/F</th><th>P/F</th><th>Debit</th><th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Remarks/Sign</th>
             </tr></thead><tbody></tbody></table>
           </div>
           <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
@@ -405,12 +375,10 @@
     <label>Password</label><input id="modalPwd"><br>
     <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0" step="0.01"><br>
     <label>Payment Mode</label>
-   <select id="modalPayMode" style="width:140px">
-  <option value="Cash">Cash</option>
-  <option value="A/c">A/c</option>
-  <option value="Within A/c">Within A/c</option>
-</select>
-
+    <select id="modalPayMode" style="width:120px">
+      <option value="Cash">Cash</option>
+      <option value="A/c">A/c</option>
+    </select>
     <div style="margin-top:10px">
       <button class="btn" id="saveLabourBtn">Save</button>
       <button id="cancelLabourBtn">Cancel</button>
@@ -768,19 +736,7 @@ html += `
 });
     html += `<td class="rowTotal">${Number(total).toFixed(2)}</td><td><button onclick="prefillAdv('${l.id}')">Add Advance</button> <button onclick="viewAdvances('${l.id}')">View</button></td></tr>`;
   });
-html += `
-</tbody>
-<tfoot>
-  <tr id="attendanceCountRow">
-    <td class="sticky-id"></td>
-    <td class="sticky-name"><strong>ATTENDED COUNT</strong></td>
-    ${days.map(d => `<td class="att-count" data-day="${d}">0</td>`).join('')}
-    <td></td>
-    <td></td>
-  </tr>
-</tfoot>
-</table>`;
-
+  html += '</tbody></table>';
   $('ownerTableWrap').innerHTML = html;
 
   // add behavior: auto-select text on focus & arrow navigation & ensure focused input sits above sticky columns
@@ -799,30 +755,7 @@ html += `
 });
 
     el.addEventListener('input', () => {
-  updateRowTotals(); 
-updateAttendanceCounts();
-
-function updateAttendanceCounts() {
-  const countMap = {};
-
-  document.querySelectorAll('.attCell').forEach(cell => {
-    const day = cell.dataset.day;
-    const val = cell.value.trim().toUpperCase();
-
-    if (!countMap[day]) countMap[day] = 0;
-
-    // ✅ Count only if attended (> 0)
-    if (val !== 'A' && Number(val) > 0) {
-      countMap[day]++;
-    }
-  });
-
-  document.querySelectorAll('.att-count').forEach(td => {
-    const day = td.dataset.day;
-    td.textContent = countMap[day] || 0;
-  });
-}
-  // 🔑 INSTANT UPDATE
+  updateRowTotals();   // 🔑 INSTANT UPDATE
 });
 el.addEventListener('blur', (ev) => {
       ev.target.style.zIndex = '';
@@ -861,19 +794,6 @@ el.addEventListener('blur', () => {
   if(scrollToTop) scrollToElement($('ownerTableWrap'));
 }
 $('loadTable').onclick = generateOwnerTable;
-// ===============================
-// 🔁 SYNC MONTH: Attendance → Salary & Advances
-// ===============================
-$('ownerMonth').addEventListener('change', () => {
-  const month = $('ownerMonth').value;
-
-  if (month) {
-    // Sync to Salary & Advances
-    $('salaryMonth').value = month;
-    $('advMonth').value = month;
-  }
-});
-
 function updateRowTotals(){
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr=>{
     let s = 0;
@@ -1011,6 +931,7 @@ function loadAdvanceForEdit() {
         // Keep amount as number in the input, but format for display consistency if needed
         $('advAmt').value = Number(advance.amount).toFixed(2);
         $('advNote').value = advance.note;
+        alert(`Loaded advance from ${advance.date} for editing. Press 'Save Advance' to commit changes.`);
     }
 }
 
@@ -1174,26 +1095,20 @@ $('saveSalary').onclick = async ()=>{
     const monthlyAdvance = Number(tr.querySelector('.sal-monthlyAdvance').value) || 0; // Read calculated value (from advances)
     const mess = Number(tr.querySelector('.sal-mess').value) || 0;
     const uf = Number(tr.querySelector('.sal-uf').value) || 0;
-  const pf1 = Number(tr.querySelector('.sal-pf1')?.value) || 0;
-const esi = Number(tr.querySelector('.sal-esi')?.value) || 0;
-const pf  = Number(tr.querySelector('.sal-pf')?.value) || 0;
-
-const debit = Number(tr.querySelector('.sal-debit')?.value) || 0;
-const jvc   = Number(tr.querySelector('.sal-jvc')?.value) || 0;
-const other = Number(tr.querySelector('.sal-other')?.value) || 0;
-
+    const pf = Number(tr.querySelector('.sal-pf').value) || 0;
+    const debit = Number(tr.querySelector('.sal-debit').value) || 0;
+    const jvc = Number(tr.querySelector('.sal-jvc').value) || 0;
+    const other = Number(tr.querySelector('.sal-other').value) || 0;
     const paid = Number(tr.querySelector('.sal-paid').value) || 0; // Read user-overridden or calculated Paid
     const remarks = tr.querySelector('.sal-remarks').value || '';
 const payload = {
   amtPerShift: Number(tr.querySelector('.sal-amt').value),   // ✅ CRITICAL
-paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
- // ✅ CRITICAL
-excludeFromExport: tr.querySelector('.sal-exclude')?.checked || false,
+  paymentMode: tr.children[12].querySelector('input').value, // ✅ CRITICAL
 
   totalShift,
   totalAmt,
   monthlyAdvance,
-  mess, uf,pf1,esi, pf, debit, jvc, other,
+  mess, uf, pf, debit, jvc, other,
   paid,
   remarks,
   savedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1222,24 +1137,16 @@ async function renderSalarySheet(){
   const month = $('salaryMonth').value || $('ownerMonth').value;
   if(!month){ alert('Select month'); return; }
 
-const labs = (await fetchAllLabours()).sort((a, b) =>
-  ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[a.paymentMode] || 9) -
-  ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[b.paymentMode] || 9)
-);
-
+  const labs = await fetchAllLabours();
   const tbody = document.querySelector('#salaryTable tbody');
   tbody.innerHTML = '';
-// ===============================
-// 🔢 PAYMENT MODE TOTALS (UI)
-// ===============================
-let totalAc = 0;
-let totalWithinAc = 0;
-let totalCash = 0;
 
   for(let i=0;i<labs.length;i++){
     const l = labs[i];
     const att = await fetchAttendance(l.id, month);
     const totalShift = Object.values(att.shifts || {}).reduce((s,v)=> s + (Number(v)||0), 0);
+    const advItems = await fetchAdvancesForLab(l.id);
+    const advTotal = advItems.filter(a=> a.date && a.date.startsWith(month)).reduce((s,x)=> s + (Number(x.amount)||0), 0);
     const saved = await fetchSalary(l.id, month) || {};
 
 
@@ -1249,8 +1156,7 @@ let totalCash = 0;
 
     const mess = Number(saved.mess||0), uf = Number(saved.uf||0), pf = Number(saved.pf||0);
     const debit = Number(saved.debit||0), jvc = Number(saved.jvc||0), other = Number(saved.other||0);
-    const monthlyAdvance = Number(saved.monthlyAdvance || 0);
-
+    const monthlyAdvance = Number(advTotal || 0);
 
     // create row — set inputs with 2-decimal formatting so user sees consistent values
     const totalAmt = Number((amtPerShift * totalShift));
@@ -1264,60 +1170,6 @@ let totalCash = 0;
   - jvc
   - other
 );
-function recalcSalaryTotals() {
-  let totalAc = 0;
-  let totalWithinAc = 0;
-  let totalCash = 0;
-
-  document.querySelectorAll('#salaryTable tbody tr').forEach(tr => {
-    const isExcluded = tr.querySelector('.sal-exclude')?.checked;
-    if (isExcluded) return;   // 🚫 ignore excluded row
-
-    const paid = Number(tr.querySelector('.sal-paid')?.value) || 0;
-    if (paid <= 0) return;
-
-    const mode =
-      tr.querySelector('td:nth-child(15) input')?.value || 'Cash';
-
-    if (mode === 'A/c') totalAc += paid;
-    else if (mode === 'Within A/c') totalWithinAc += paid;
-    else totalCash += paid;
-  });
-
-  const box = document.getElementById('salaryTotalsBox');
-  if (!box) return;
-
-  const grandTotal = totalAc + totalWithinAc + totalCash;
-
-  box.innerHTML = `
-    <div>A/c Total : ₹ ${totalAc.toFixed(2)}</div>
-    <div>Within A/c Total : ₹ ${totalWithinAc.toFixed(2)}</div>
-    <div>Cash Total : ₹ ${totalCash.toFixed(2)}</div>
-    <hr style="margin:6px 0">
-    <div style="font-size:16px">
-      GRAND TOTAL : ₹ ${grandTotal.toFixed(2)}
-    </div>
-  `;
-}
-
-// ✅ ADD TO PAYMENT MODE TOTALS
-const isExcluded =
-  saved.excludeFromExport === true;
-
-
-
-const box = document.getElementById('salaryTotalsBox');
-
-if (box) {
-  const grandTotal = totalAc + totalWithinAc + totalCash;
-
-  box.innerHTML =
-    '<div>A/c Total : ₹ ' + totalAc.toFixed(2) + '</div>' +
-    '<div>Within A/c Total : ₹ ' + totalWithinAc.toFixed(2) + '</div>' +
-    '<div>Cash Total : ₹ ' + totalCash.toFixed(2) + '</div>' +
-    '<hr style="margin:6px 0">' +
-    '<div style="font-size:16px">GRAND TOTAL : ₹ ' + grandTotal.toFixed(2) + '</div>';
-}
 
     const tr = document.createElement('tr');
    tr.innerHTML = `
@@ -1347,40 +1199,16 @@ if (box) {
 </td>
 
 <td>
-  <input class="sal-monthlyAdvance sal-editable"
-         type="number"
-         step="0.01"
-         value="${Number(saved.monthlyAdvance ?? monthlyAdvance).toFixed(2)}"
-         style="width:110px">
+  <input class="sal-monthlyAdvance readonly"
+         value="${monthlyAdvance.toFixed(2)}"
+         readonly
+         style="width:110px;background:#f5f7fb">
 </td>
-
 
 <td><input class="sal-mess sal-editable" type="number" step="0.01" value="${mess.toFixed(2)}"></td>
 <td><input class="sal-uf sal-editable" type="number" step="0.01" value="${uf.toFixed(2)}"></td>
-
-<td>
-  <input class="sal-pf1 sal-editable"
-         type="number"
-         step="0.01"
-         value="${Number(saved.pf1 || 0).toFixed(2)}">
-</td>
-
-<td>
-  <input class="sal-esi sal-editable"
-         type="number"
-         step="0.01"
-         value="${Number(saved.esi || 0).toFixed(2)}">
-</td>
-
-<td>
-  <input class="sal-pf readonly"
-         readonly
-         style="background:#f5f7fb;width:90px"
-         value="${pf.toFixed(2)}">
-</td>
-
+<td><input class="sal-pf sal-editable" type="number" step="0.01" value="${pf.toFixed(2)}"></td>
 <td><input class="sal-debit sal-editable" type="number" step="0.01" value="${debit.toFixed(2)}"></td>
-
 <td><input class="sal-jvc sal-editable" type="number" step="0.01" value="${jvc.toFixed(2)}"></td>
 
 <td>
@@ -1403,50 +1231,24 @@ if (box) {
          style="width:110px;background:#f5f7fb">
 </td>
 
-<td>
-  <input type="checkbox"
-         class="sal-exclude"
-         ${saved.excludeFromExport ? 'checked' : ''}>
-</td>
-
-<td>
-  <input class="sal-remarks sal-editable"
-         value="${saved.remarks || ''}">
-</td>
-
+<td><input class="sal-remarks sal-editable" value="${saved.remarks || ''}"></td>
 `;
 
 tbody.appendChild(tr);
-// 🔁 Recalculate totals when Exclude checkbox is toggled
-const excludeBox = tr.querySelector('.sal-exclude');
-if (excludeBox) {
-  excludeBox.addEventListener('change', recalcSalaryTotals);
-}
-
-// --- ADD THIS BLOCK TO JUMP TO SEARCH BOX ---
-
   // attach event listeners (recalculate whenever a relevant field changes)
-document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => {
+ document.querySelectorAll('#salaryTable input, #salaryTable select').forEach(inp => {
+  inp.addEventListener('input', salaryInputsChanged);
 
-  inp.addEventListener('input', (e) => {
-    salaryArrowNavigation = false; // ✅ USER EDIT CONFIRMED
-    salaryInputsChanged(e);
+  /* ✅ AUTO SELECT TEXT ON FOCUS */
+  inp.addEventListener('focus', (e) => {
+    if (e.target.select) {
+      setTimeout(() => e.target.select(), 0);
+    }
   });
 
-
-
-if(inp.classList.contains('sal-editable')) {
-
-  // 🔹 When user finishes editing number (ENTER / click / tab)
-inp.addEventListener('blur', (e) => {
-  salaryInputsChanged({ target: e.target });
-});
-
-
-  // keep arrow navigation if you want
-  inp.addEventListener('keydown', salaryCellKeyHandler);
-}
-
+  if(inp.classList.contains('sal-editable')) {
+    inp.addEventListener('keydown', salaryCellKeyHandler);
+  }
 });
 
   // Force a recalculation pass for every row so Paid column is guaranteed correct after "Show Salary"
@@ -1458,21 +1260,18 @@ inp.addEventListener('blur', (e) => {
     }
   });
   scrollToElement($('salaryCard'));
-recalcSalaryTotals();
 }
 
 /* Recalculate a single row's totals and update Paid (called on input and once after render) */
 function salaryInputsChanged(e){
-const target = e.target;
+  const target = e.target;
+  const id = target?.dataset?.id;
+  if(!id) return;
 
-// 🔑 ALWAYS get row first (works for all salary inputs)
-const row = target.closest('tr');
-if (!row) return;
-
-// 🔑 ID is stored ONLY on sal-amt
-const id = row.querySelector('.sal-amt')?.dataset?.id;
-if (!id) return;
-
+  // find the row for this id
+  const row = Array.from(document.querySelectorAll('#salaryTable tbody tr'))
+    .find(tr => tr.querySelector('.sal-amt')?.dataset.id === id);
+  if(!row) return;
 
   // read numeric inputs (tolerant parsing)
   const amtPerShift = Number(row.querySelector('.sal-amt').value) || 0;
@@ -1480,19 +1279,7 @@ if (!id) return;
   const monthlyAdvance = Number(row.querySelector('.sal-monthlyAdvance').value) || 0;
   const mess = Number(row.querySelector('.sal-mess').value) || 0;
   const uf = Number(row.querySelector('.sal-uf').value) || 0;
- // 🔹 READ PF1 & ESI (new columns)
-const pf1 = Number(row.querySelector('.sal-pf1')?.value) || 0;
-const esi = Number(row.querySelector('.sal-esi')?.value) || 0;
-
-// 🔹 AUTO CALCULATE P/F
-const pf = pf1 + esi;
-
-// 🔹 WRITE BACK TO P/F COLUMN (readonly)
-const pfInput = row.querySelector('.sal-pf');
-if (pfInput) {
-  pfInput.value = pf.toFixed(2);
-}
-
+  const pf = Number(row.querySelector('.sal-pf').value) || 0;
   const debit = Number(row.querySelector('.sal-debit').value) || 0;
   const jvc = Number(row.querySelector('.sal-jvc').value) || 0;
   const other = Number(row.querySelector('.sal-other').value) || 0;
@@ -1629,9 +1416,6 @@ async function collectSalaryForMonth(month){
   const trs = document.querySelectorAll('#salaryTable tbody tr');
 
   trs.forEach((tr, i) => {
-    const isExcluded = tr.querySelector('.sal-exclude')?.checked;
-    if (isExcluded) return; // 🚫 skip export
-
     const nameCell = tr.querySelector('.sticky-name')?.textContent || '';
     const parts = nameCell.split(' - ');
 
@@ -1649,7 +1433,10 @@ async function collectSalaryForMonth(month){
       debit: tr.querySelector('.sal-debit').value,
       jvc: tr.querySelector('.sal-jvc').value,
       other: tr.querySelector('.sal-other').value,
-      paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
+
+      // ✅ FIXED INDEX
+      paymentMode: tr.children[12].querySelector('input').value,
+
       paidSalary: tr.querySelector('.sal-paid').value,
       remarks: tr.querySelector('.sal-remarks').value
     });
@@ -1659,17 +1446,15 @@ async function collectSalaryForMonth(month){
 }
 
 
+
 /* Salary Export Functions (IMPLEMENTED) */
 async function exportSalaryCSV(){
   const month = $('salaryMonth').value || $('ownerMonth').value; if(!month){ alert('Select month'); return; }
   const rows = await collectSalaryForMonth(month);
 // 🔁 ORDER: A/c FIRST, Cash AFTER
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
-const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
-const cashRows = rows.filter(r => r.paymentMode === 'Cash');
-
-const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
-
+const cashRows = rows.filter(r => r.paymentMode !== 'A/c');
+const orderedRows = [...acRows, ...cashRows];
 
   const header = ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks/Sign'];
 
@@ -1686,51 +1471,18 @@ async function exportSalaryXLS(){
   const rows = await collectSalaryForMonth(month);
 // 🔁 ORDER: A/c FIRST, Cash AFTER
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
-const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
-const cashRows = rows.filter(r => r.paymentMode === 'Cash');
-
-const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
-
+const cashRows = rows.filter(r => r.paymentMode !== 'A/c');
+const orderedRows = [...acRows, ...cashRows];
 
   const header = ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks/Sign'];
 
   let html = '<table border="1"><tr>' + header.map(h=>`<th>${h}</th>`).join('') + '</tr>';
   rows.forEach(r => {
-  html += `
-<tr>
-<td>${r.sno}</td>
-<td>${r.id}</td>
-<td>${r.name}</td>
-<td>${r.amtPerShift}</td>
-<td>${r.totalShift}</td>
-<td>${r.totalAmt}</td>
-<td>${r.monthlyAdvance}</td>
-<td>${r.mess}</td>
-<td>${r.uf}</td>
-<td>${r.pf}</td>        <!-- ✅ PF ONLY -->
-<td>${r.debit}</td>
-<td>${r.jvc}</td>
-<td>${r.other}</td>
-<td>${r.paymentMode}</td>
-<td>${r.paidSalary}</td>
-<td>${r.remarks}</td>
-</tr>`;
-});
-
+    html += `<tr><td>${r.sno}</td><td>${r.id}</td><td>${r.name}</td><td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td><td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td><td>${r.other}</td><td>${r.paymentMode}</td><td>${r.paidSalary}</td><td>${r.remarks}</td></tr>`;
+  });
   html += '</table>';
   downloadBlob('\uFEFF'+html, `salary_sheet_${month}.xls`, 'application/vnd.ms-excel');
 }
-function formatMonthName(monthStr){
-  // monthStr = "2026-01"
-  const [year, month] = monthStr.split('-');
-  const date = new Date(Number(year), Number(month) - 1, 1);
-
-  return date.toLocaleString('en-US', {
-    month: 'long',
-    year: 'numeric'
-  }).toUpperCase();
-}
-
 async function exportSalaryPDF(){
   const month = $('salaryMonth').value || $('ownerMonth').value;
   if(!month){ alert('Select month'); return; }
@@ -1738,37 +1490,8 @@ async function exportSalaryPDF(){
   const rows = await collectSalaryForMonth(month);
 // 🔁 ORDER: A/c FIRST, Cash AFTER
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
-const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
-const cashRows = rows.filter(r => r.paymentMode === 'Cash');
-
-const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
-
-// ===============================
-// 🔢 TOTAL PAID CALCULATION (PDF ONLY)
-// ===============================
-let totalAcPaid = 0;
-let totalCashPaid = 0;
-let totalWithinAcPaid = 0;
-
-orderedRows.forEach(r => {
-  const paidRaw = Number(r.paidSalary) || 0;
-
-// ✅ ADD ONLY IF POSITIVE
-if (paidRaw > 0) {
-  if (r.paymentMode === 'A/c') {
-    totalAcPaid += paidRaw;
-  } else if (r.paymentMode === 'Within A/c') {
-    totalWithinAcPaid += paidRaw;
-  } else {
-    totalCashPaid += paidRaw;
-  }
-}
-
-
-});
-const grandTotal =
-  totalAcPaid + totalWithinAcPaid + totalCashPaid;
-
+const cashRows = rows.filter(r => r.paymentMode !== 'A/c');
+const orderedRows = [...acRows, ...cashRows];
 
   if(rows.length === 0){
     alert('No salary data');
@@ -1781,12 +1504,14 @@ for(let i = 0; i < orderedRows.length; i += ROWS_PER_PAGE){
   pages.push(orderedRows.slice(i, i + ROWS_PER_PAGE));
 }
 
-let html = `
-<div id="pdfRoot">
+
+  let html = `
+  <div id="pdfRoot" style="font-family:Arial">
+    <style>
 <style>
 @page {
   size: A4 landscape;
-  margin: 0;
+  margin: 0;              /* 🔑 REMOVE browser margins */
 }
 
 html, body {
@@ -1799,27 +1524,21 @@ html, body {
 
 /* WRAPPER TO CONTROL POSITION */
 .page {
-  width: 297mm;
-  height: 210mm;
-  padding: 6mm;
+  width: 297mm;           /* A4 landscape width */
+  height: 210mm;          /* A4 landscape height */
+  padding: 4mm 2mm 2mm 2mm;  /* top right bottom left */
   box-sizing: border-box;
-
-  /* ✅ CENTER FIX */
-  margin: 0 auto;
-
-  /* REMOVE SCALE SHIFT */
-  transform: none;
 }
 
-
+/* TABLE */
 table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  margin: 6px auto 0 auto;  /* ✅ CENTER TABLE */
-  font-size: 9.5px;
+  font-size: 8.3px;       /* 🔑 slightly smaller */
+  transform: scale(0.986); /* 🔑 shrink to avoid cut */
+  transform-origin: top left;
 }
-
 
 th, td {
   border: 1px solid #000;
@@ -1842,7 +1561,8 @@ th:nth-child(4),  td:nth-child(4)  { width: 55px; }
 th:nth-child(5),  td:nth-child(5)  { width: 55px; }
 th:nth-child(6),  td:nth-child(6)  { width: 60px; }
 th:nth-child(7),  td:nth-child(7)  { width: 45px; }
-
+th:nth-child(8),  td:nth-child(8)  { width: 45px; }
+th:nth-child(9),  td:nth-child(9)  { width: 45px; }
 th:nth-child(10), td:nth-child(10) { width: 45px; }
 th:nth-child(11), td:nth-child(11) { width: 45px; }
 th:nth-child(12), td:nth-child(12) { width: 45px; }
@@ -1852,54 +1572,23 @@ th:nth-child(15), td:nth-child(15) { width: 40px; }
 th:nth-child(16), td:nth-child(16) { width: 150px; text-align:left; }
 
 /* PAGE BREAK */
-
 .page-break {
   page-break-after: always;
 }
 </style>
 
+
+
+      th { background:#eee; }
+      .page { page-break-after: always; }
+    </style>
   `;
 pages.forEach((pageRows, pageIndex) => {
 
-if(pageIndex === 0){
-  html += `
-  <div style="text-align:center; font-weight:bold; margin-bottom:6px;">
-    <div style="font-size:18px; letter-spacing:1px;">
-      VEERANAR FINISHERS
-    </div>
-    <div style="font-size:14px; margin-top:4px;">
-      MONTHLY SALARY ${formatMonthName(month)}
-    </div>
-  </div>
-
-  <!-- 🔢 TOTAL SUMMARY (PDF ONLY) -->
-<div style="
-  display:flex;
-  align-items:center;
-  font-size:11px;
-  margin:6px 0 8px 0;
-  padding:6px;
-  border:1px solid #000;
-">
-  <div style="flex:1; text-align:left;">
-    <strong>A/c Paid :</strong> ₹${totalAcPaid.toFixed(2)}
-  </div>
-<div style="flex:1; text-align:center;">
-  <strong>Within A/c Paid :</strong> ₹${totalWithinAcPaid.toFixed(2)}
-</div>
-
-  <div style="flex:1; text-align:center;">
-    <strong>Cash Paid :</strong> ₹${totalCashPaid.toFixed(2)}
-  </div>
-
-  <div style="flex:1; text-align:right; padding-right:60px;">
-    <strong>Total Paid :</strong> ₹${grandTotal.toFixed(2)}
-  </div>
-</div>
-
-  `;
-}
-
+  /* Title ONLY on first page */
+  if(pageIndex === 0){
+    html += `<h2 style="text-align:center">Salary Sheet - ${month}</h2>`;
+  }
 
   html += `
   <div class="page">
@@ -1909,11 +1598,8 @@ if(pageIndex === 0){
   <tr>
     <th>S.No</th><th>ID</th><th>Name</th>
     <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-    <th>Advance</th><th>Mess</th><th>U/F</th>
-
-<th>P/F</th>
-<th>Debit</th>
-<th>JVC</th><th>Other</th>
+    <th>Advance</th><th>Mess</th><th>U/F</th><th>P/F</th>
+    <th>Debit</th><th>JVC</th><th>Other</th>
     <th>Paid</th><th>A/c</th><th>Remark</th>
   </tr>
 </thead>` : ``}
@@ -1958,15 +1644,12 @@ html2pdf()
     margin: [8, 8, 8, 8],
     filename: `salary_sheet_${month}.pdf`,
     jsPDF: { orientation: 'landscape', format: 'a4', unit: 'mm' },
-  html2canvas: {
-  scale: 2,                // 🔑 HIGH DPI
-  scrollX: 0,
-  scrollY: 0,
-  windowWidth: 1600,
-  letterRendering: true,
-  useCORS: true
-}
-
+    html2canvas: {
+      scale: 1.3,        /* 🔑 DO NOT USE 2 */
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: 1400  /* 🔑 Forces full table render */
+    }
   })
     .save()
     .then(() => div.remove());
@@ -2312,11 +1995,7 @@ auth.onAuthStateChanged(user => {
 /* ===== Utility functions ===== */
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
 function getDays(monthStr){ const [y,m] = monthStr.split('-').map(Number); const n = daysInMonth(y,m); const arr=[]; for(let d=1; d<=n; d++) arr.push(d); return arr; }
-
-// ===============================
-// Salary navigation state (REQUIRED)
-// ===============================
-
+function getRateForLabour(id){ return 0; }
 
 /* Arrow key handler for attendance cells:
    - Arrow left/right moves within same row
@@ -2388,89 +2067,49 @@ if(e.key === 'Enter'){
 /* Arrow key handler for salary sheet cells:
    - Moves only between the cells with the class 'sal-editable'
 */
-function salaryCellKeyHandler(e) {
+function salaryCellKeyHandler(e){
   const el = e.target;
-  if (!el.classList.contains('sal-editable')) return;
+  // Use a generalized selector for all editable/navigable elements within the table
+  const allEditable = Array.from(document.querySelectorAll('#salaryTable .sal-editable'));
+  const currentIdx = allEditable.indexOf(el);
 
-  const row = el.closest('tr');
-  if (!row) return;
+  if(currentIdx === -1) return; // Should not happen if event listener is only on sal-editable
 
-  const allRows = Array.from(document.querySelectorAll('#salaryTable tbody tr'));
-  const rowIndex = allRows.indexOf(row);
+  const tr = el.closest('tr');
+  if(!tr) return;
 
-  const cellsInRow = Array.from(row.querySelectorAll('.sal-editable'));
-  const colIndex = cellsInRow.indexOf(el);
-  if (colIndex === -1) return;
+  const editableInRow = Array.from(tr.querySelectorAll('.sal-editable'));
+  const idxInRow = editableInRow.indexOf(el);
 
-  // 👉 mark arrow navigation
-  if (
-    e.key === 'ArrowLeft' ||
-    e.key === 'ArrowRight' ||
-    e.key === 'ArrowUp' ||
-    e.key === 'ArrowDown'
-  ) {
-    salaryArrowNavigation = true;
-  }
-
-  // ➡️ RIGHT
-  if (e.key === 'ArrowRight') {
+  if(e.key === 'ArrowRight'){
     e.preventDefault();
-    if (colIndex < cellsInRow.length - 1) {
-      cellsInRow[colIndex + 1].focus();
-      cellsInRow[colIndex + 1].select();
+    if(currentIdx < allEditable.length - 1) allEditable[currentIdx + 1].focus();
+  } else if(e.key === 'ArrowLeft'){
+    e.preventDefault();
+    if(currentIdx > 0) allEditable[currentIdx - 1].focus();
+  } else if(e.key === 'ArrowDown'){
+    e.preventDefault();
+    const rows = Array.from(document.querySelectorAll('#salaryTable tbody tr'));
+    const rIdx = rows.indexOf(tr);
+    if(rIdx < rows.length - 1){
+      const nextRow = rows[rIdx + 1];
+      const nextRowEditable = Array.from(nextRow.querySelectorAll('.sal-editable'));
+      // Find the element at the same column index (idxInRow) in the next row
+      const next = nextRowEditable[idxInRow];
+      if(next) next.focus();
+    }
+  } else if(e.key === 'ArrowUp'){
+    e.preventDefault();
+    const rows = Array.from(document.querySelectorAll('#salaryTable tbody tr'));
+    const rIdx = rows.indexOf(tr);
+    if(rIdx > 0){
+      const prevRow = rows[rIdx - 1];
+      const prevRowEditable = Array.from(prevRow.querySelectorAll('.sal-editable'));
+      // Find the element at the same column index (idxInRow) in the previous row
+      const prev = prevRowEditable[idxInRow];
+      if(prev) prev.focus();
     }
   }
-
-  // ⬅️ LEFT
-  else if (e.key === 'ArrowLeft') {
-    e.preventDefault();
-    if (colIndex > 0) {
-      cellsInRow[colIndex - 1].focus();
-      cellsInRow[colIndex - 1].select();
-    }
-  }
-
-  // ⬇️ DOWN
-  else if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    if (rowIndex < allRows.length - 1) {
-      const nextCell =
-        allRows[rowIndex + 1].querySelectorAll('.sal-editable')[colIndex];
-      if (nextCell) {
-        nextCell.focus();
-        nextCell.select();
-      }
-    }
-  }
-
-  // ⬆️ UP
-  else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    if (rowIndex > 0) {
-      const prevCell =
-        allRows[rowIndex - 1].querySelectorAll('.sal-editable')[colIndex];
-      if (prevCell) {
-        prevCell.focus();
-        prevCell.select();
-      }
-    }
-  }
-
-  // ✅ ENTER = FINAL CONFIRM → GO BACK TO SEARCH
- else if (e.key === 'Enter') {
-  e.preventDefault();
-
-  salaryInputsChanged({ target: el });
-
-  const search = document.getElementById('salarySearch');
-  if (search) {
-    search.focus();
-    search.select();
-  }
-
-  salaryArrowNavigation = false; // reset
-}
-
 }
 
 
@@ -2540,7 +2179,7 @@ window.addEventListener('load', async ()=>{
     await renderLabourList(); 
     await populateAdvSelect(); 
   }catch(e){ 
-   
+    console.warn('Init load: ', e.message); 
   } 
 });
 function ownerFilter(){
@@ -2592,54 +2231,11 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
     setTimeout(() => targetCell.select(), 0);
   }
 });
-// ===== ENTER in Salary search → jump to selected column =====
-document.getElementById('salarySearch').addEventListener('keydown', function (e) {
-  if (e.key !== 'Enter') return;
-
-  e.preventDefault();
-
-  const useJump = document.getElementById('useSalaryJump').checked;
-  if (!useJump) return;
-
-  const colClass = document.getElementById('salaryJumpColumn').value;
-
-  // Find first visible salary row
-  const rows = Array.from(document.querySelectorAll('#salaryTable tbody tr'))
-    .filter(r => r.style.display !== 'none');
-
-  if (!rows.length) return;
-
-  const row = rows[0];
-  const targetInput = row.querySelector('.' + colClass);
-
-  if (targetInput) {
-    targetInput.focus();
-    setTimeout(() => targetInput.select(), 0); // ✅ AUTO SELECT
-  }
-});
-
 
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
