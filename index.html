@@ -246,6 +246,45 @@
           <button id="exportShiftPDF">Export PDF</button>
         </div>
         <div id="ownerTableWrap" class="table-wrap card"></div>
+<!-- ===============================
+ SHORTLIST BOX (AUTO FROM ATTENDANCE)
+================================ -->
+<div class="card" id="shortlistCard" style="margin-top:12px">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+<div style="display:flex;justify-content:space-between;align-items:center;">
+  <h3 style="margin:0;">Shortlist (0.5 / 2 Shift)</h3>
+
+  <div style="display:flex;gap:8px;">
+    <button class="btn" id="shortlistBtn">Shortlist</button>
+    <button class="success" id="saveShortlist">Save</button>
+<button id="exportShortlistPDF">PDF</button>
+    <button id="exportShortlistXLS">Excel</button>
+    <button id="exportShortlistCSV">CSV</button>
+
+  </div>
+</div>
+
+  </div>
+
+  <div class="table-wrap" style="margin-top:8px">
+    <table id="shortlistTable">
+     <thead>
+  <tr>
+    <th>ID NO</th>
+    <th>NAME</th>
+    <th>DATE</th>
+    <th>SHIFT</th>
+    <th>IN TIME</th>
+    <th>OUT TIME</th>
+    <th>PRESENT TIME (HRS)</th>
+  </tr>
+</thead>
+
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
     </div>
 
 <label style="margin-left:8px">
@@ -423,6 +462,105 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
 <script>
+async function generateShortlist() {
+  const month = $('ownerMonth').value;
+  if (!month) {
+    alert('Select month first');
+    return;
+  }
+
+
+
+  const labours = await fetchAllLabours();
+  const rows = []; // ✅ COLLECT FIRST
+
+  for (const lab of labours) {
+    const att = await fetchAttendance(lab.id, month);
+    if (!att || !att.shifts) continue;
+
+    for (const day in att.shifts) {
+      const shift = Number(att.shifts[day]);
+
+      // ✅ ONLY 0.5 OR 2 SHIFT
+      if (shift === 0.5 || shift === 2) {
+        const date = `${month}-${String(day).padStart(2, '0')}`;
+
+        rows.push({
+          id: lab.id,
+          name: lab.name,
+          date,
+          shift
+        });
+      }
+    }
+  }
+
+  // ✅ SORT BY DATE (ASCENDING)
+  rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // ✅ NOW RENDER
+  rows.forEach(r => {
+const tr = document.createElement('tr');
+
+tr.innerHTML = `
+  <td>${lab.id}</td>
+  <td>${lab.name}</td>
+  <td>${date}</td>
+  <td>${shift}</td>
+  <td><input type="time" class="in-time"></td>
+  <td><input type="time" class="out-time"></td>
+  <td><input class="present-time" readonly></td>
+`;
+
+tbody.appendChild(tr);
+
+  });
+
+  enableShortlistLiveTime(); // keep live calculation
+}
+
+
+
+function enableShortlistLiveTime() {
+  document.querySelectorAll('#shortlistTable tbody tr').forEach(row => {
+    const inTime = row.querySelector('.in-time');
+    const outTime = row.querySelector('.out-time');
+    const present = row.querySelector('.present-time');
+
+    function calc() {
+      if (!inTime.value || !outTime.value) {
+        present.value = '';
+        return;
+      }
+
+      const [ih, im] = inTime.value.split(':').map(Number);
+      const [oh, om] = outTime.value.split(':').map(Number);
+
+      let startMins = ih * 60 + im;
+      let endMins = oh * 60 + om;
+
+      // ✅ HANDLE NIGHT SHIFT (PM → AM)
+      if (endMins < startMins) {
+        endMins += 24 * 60;
+      }
+
+      const diff = endMins - startMins;
+
+      const hrs = Math.floor(diff / 60);
+      const mins = diff % 60;
+
+      // ✅ DISPLAY AS HH:MM
+      present.value =
+        String(hrs).padStart(2, '0') +
+        ':' +
+        String(mins).padStart(2, '0');
+    }
+
+    inTime.addEventListener('change', calc);
+    outTime.addEventListener('change', calc);
+  });
+}
+
 function parseAttendance(ci){
   const val = ci.value.trim().toUpperCase();
 
@@ -493,6 +631,22 @@ $('ownerBtn').onclick = ()=>{ hideAll(); $('ownerLoginCard').classList.remove('h
 $('labourBtn').onclick = ()=>{ hideAll(); $('labourLoginCard').classList.remove('hidden'); scrollToTop(); };
 $('ownerBack').onclick = ()=>location.reload();
 $('labourBack').onclick = ()=>location.reload();
+$('exportShortlistPDF').onclick = exportShortlistPDF;
+async () => {
+  await saveShortlistToFirestore(); // 🔐 SAVE FIRST
+  exportShortlistPDF();             // ⬇️ DOWNLOAD
+};
+
+$('exportShortlistXLS').onclick = async () => {
+  await saveShortlistToFirestore();
+  exportShortlistXLS();
+};
+
+$('exportShortlistCSV').onclick = async () => {
+  await saveShortlistToFirestore();
+  exportShortlistCSV();
+};
+
 
 /* quick helper for scrolling */
 function scrollToTop(){ window.scrollTo({top:0, behavior:'smooth'}); }
@@ -724,6 +878,8 @@ async function initOwnerView(){
   switchTab('attendance'); 
   // Generate the table now that the month is set
   await generateOwnerTable(); 
+await loadSavedShortlist();
+
 }
 
 /* Generate owner attendance table (pulls attendance docs from Firestore) */
@@ -860,7 +1016,142 @@ el.addEventListener('blur', () => {
   updateRowTotals();
   if(scrollToTop) scrollToElement($('ownerTableWrap'));
 }
-$('loadTable').onclick = generateOwnerTable;
+$('loadTable').onclick = async () => {
+  await generateOwnerTable();
+  await renderShortlistFromAttendance(); // 🔥 REQUIRED
+};
+
+
+// ===============================
+// SHORTLIST FROM ATTENDANCE
+// ===============================
+async function renderShortlistFromAttendance() {
+  const month = $('ownerMonth').value;
+  if (!month) return;
+console.log('Attendance sample:', await fetchAttendance('ANY_ID', $('ownerMonth').value));
+
+  const tbody = document.querySelector('#shortlistTable tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const labs = await fetchAllLabours();
+
+  for (const lab of labs) {
+   const att = await fetchAttendance(lab.id, month);
+
+for (const [date, shift] of async function renderShortlistFromAttendance() {
+  const month = $('ownerMonth').value;
+  if (!month) return;
+
+  const tbody = document.querySelector('#shortlistTable tbody');
+  tbody.innerHTML = '';
+
+  const labs = await fetchAllLabours();
+
+  for (const lab of labs) {
+    const att = await fetchAttendance(lab.id, month);
+    if (!att || !att.shifts) continue;
+
+    for (const day in att.shifts) {
+      const shiftVal = Number(att.shifts[day]);
+
+      // ✅ ONLY 0.5 OR 2 SHIFT
+      if (shiftVal === 0.5 || shiftVal === 2) {
+        const fullDate =
+          month + '-' + String(day).padStart(2, '0');
+
+        const tr = document.createElement('tr');
+
+        tr.innerHTML = `
+          <td>${lab.id}</td>
+          <td>${lab.name}</td>
+          <td>${fullDate}</td>
+          <td>${shiftVal}</td>
+          <td>
+            <input class="in-time" type="time">
+          </td>
+          <td>
+            <input class="out-time" type="time">
+          </td>
+          <td>
+            <input class="present-time" readonly
+                   style="background:#f5f7fb;width:90px">
+          </td>
+        `;
+
+        tbody.appendChild(tr);
+      }
+    }
+  }
+
+  enableLivePresentCalculation();
+}
+
+) {
+  const shiftVal = Number(shift || 0);
+
+  // ✅ ONLY 0.5 OR 2 SHIFT
+  if (shiftVal === 0.5 || shiftVal === 2) {
+    const tr = document.createElement('tr');
+
+    tr.innerHTML = `
+      <td>${lab.id}</td>
+      <td>${lab.name}</td>
+      <td>${date}</td>
+      <td>${shiftVal}</td>
+      <td><input class="in-time"  placeholder="9:00 AM"  style="width:90px"></td>
+      <td><input class="out-time" placeholder="5:30 PM" style="width:90px"></td>
+      <td><input class="present-time" readonly style="width:90px;background:#f5f7fb"></td>
+    `;
+
+    tbody.appendChild(tr);
+  }
+}
+
+  }
+
+  enableLivePresentCalculation(); // 🔴 LIVE CALC
+}
+function parse12HourTimeToMinutes(t) {
+  if (!t) return null;
+
+  const m = t.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!m) return null;
+
+  let h = Number(m[1]);
+  const min = Number(m[2]);
+  const ap = m[3].toUpperCase();
+
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+
+  return h * 60 + min;
+}
+function enableLivePresentCalculation() {
+  document.querySelectorAll('#shortlistTable tbody tr').forEach(row => {
+    const inBox  = row.querySelector('.in-time');
+    const outBox = row.querySelector('.out-time');
+    const result = row.querySelector('.present-time');
+
+    function calculateLive() {
+      const inMin  = parse12HourTimeToMinutes(inBox.value);
+      const outMin = parse12HourTimeToMinutes(outBox.value);
+
+      if (inMin === null || outMin === null || outMin <= inMin) {
+        result.value = '';
+        return;
+      }
+
+      const diffMin = outMin - inMin;
+      result.value = (diffMin / 60).toFixed(2); // 🔥 LIVE RESULT
+    }
+
+    // 🔴 LIVE WHILE TYPING
+    inBox.addEventListener('input', calculateLive);
+    outBox.addEventListener('input', calculateLive);
+  });
+}
+
 // ===============================
 // 🔁 SYNC MONTH: Attendance → Salary & Advances
 // ===============================
@@ -1229,7 +1520,7 @@ const labs = (await fetchAllLabours()).sort((a, b) =>
 );
 
   const tbody = document.querySelector('#salaryTable tbody');
-  tbody.innerHTML = '';
+
 // ===============================
 // 🔢 PAYMENT MODE TOTALS (UI)
 // ===============================
@@ -2558,6 +2849,7 @@ $('exportAdvCSV').onclick = exportAdvCSV;
 $('exportAdvXLS').onclick = exportAdvXLS;
 $('exportAdvPDF').onclick = exportAdvPDF;
 
+
 /* init on load - we only call renderLabourList and populateAdvSelect here as initOwnerView handles the first tab switch */
 window.addEventListener('load', async ()=>{ 
   try{ 
@@ -2641,12 +2933,273 @@ document.getElementById('salarySearch').addEventListener('keydown', function (e)
     setTimeout(() => targetInput.select(), 0); // ✅ AUTO SELECT
   }
 });
+async function loadSavedShortlist() {
+  const month = $('ownerMonth').value;
+  if (!month) return;
 
+  const tbody = document.querySelector('#shortlistTable tbody');
+  tbody.innerHTML = '';
+
+  const snap = await db.collection('shortlists')
+    .where('month', '==', month)
+    .get();
+
+  snap.forEach(doc => {
+    const d = doc.data();
+    const key = `${d.labourId}_${d.date}`;
+
+    const tr = document.createElement('tr');
+    tr.dataset.key = key;
+
+    tr.innerHTML = `
+      <td>${d.labourId}</td>
+      <td>${d.name}</td>
+      <td>${d.date}</td>
+      <td>${d.shift}</td>
+      <td><input type="time" class="in-time" value="${d.inTime || ''}"></td>
+      <td><input type="time" class="out-time" value="${d.outTime || ''}"></td>
+      <td><input class="present-time" readonly value="${d.presentTime || ''}"></td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+
+  enableShortlistLiveTime();
+}
+
+$('shortlistBtn').onclick = generateShortlist;
+function exportShortlistCSV() {
+  const rows = document.querySelectorAll('#shortlistTable tbody tr');
+  if (!rows.length) {
+    alert('No shortlist data');
+    return;
+  }
+
+  const header = [
+    'ID NO','NAME','DATE','SHIFT','IN TIME','OUT TIME','PRESENT TIME'
+  ];
+
+  const csvRows = [header.join(',')];
+
+  rows.forEach(r => {
+    const tds = r.querySelectorAll('td');
+    const inTime = r.querySelector('.in-time')?.value || '';
+    const outTime = r.querySelector('.out-time')?.value || '';
+    const present = r.querySelector('.present-time')?.value || '';
+
+    csvRows.push([
+      tds[0].innerText,
+      `"${tds[1].innerText}"`,
+      tds[2].innerText,
+      tds[3].innerText,
+      inTime,
+      outTime,
+      present
+    ].join(','));
+  });
+
+  downloadBlob(csvRows.join('\n'),
+    `shortlist_${$('ownerMonth').value}.csv`,
+    'text/csv'
+  );
+}
+function exportShortlistXLS() {
+  const rows = document.querySelectorAll('#shortlistTable tbody tr');
+  if (!rows.length) {
+    alert('No shortlist data');
+    return;
+  }
+
+  let html = `
+  <table border="1">
+    <tr>
+      <th>ID NO</th><th>NAME</th><th>DATE</th><th>SHIFT</th>
+      <th>IN TIME</th><th>OUT TIME</th><th>PRESENT TIME</th>
+    </tr>`;
+
+  rows.forEach(r => {
+    const tds = r.querySelectorAll('td');
+    html += `
+      <tr>
+        <td>${tds[0].innerText}</td>
+        <td>${tds[1].innerText}</td>
+        <td>${tds[2].innerText}</td>
+        <td>${tds[3].innerText}</td>
+        <td>${r.querySelector('.in-time')?.value || ''}</td>
+        <td>${r.querySelector('.out-time')?.value || ''}</td>
+        <td>${r.querySelector('.present-time')?.value || ''}</td>
+      </tr>`;
+  });
+
+  html += '</table>';
+
+  downloadBlob(
+    '\uFEFF' + html,
+    `shortlist_${$('ownerMonth').value}.xls`,
+    'application/vnd.ms-excel'
+  );
+}
+
+
+async function saveShortlistToFirestore() {
+  console.log('🟡 saveShortlistToFirestore() started');
+
+  if (!isOwnerSignedIn()) {
+    alert('Owner login required');
+    console.error('❌ Not owner');
+    return;
+  }
+
+  const rows = document.querySelectorAll('#shortlistTable tbody tr');
+  console.log('Rows found:', rows.length);
+
+  if (!rows.length) {
+    alert('No shortlist rows to save');
+    return;
+  }
+
+  const batch = db.batch();
+  const month = $('ownerMonth').value;
+
+  rows.forEach((row, i) => {
+    const tds = row.querySelectorAll('td');
+
+    const labourId = tds[0]?.textContent.trim();
+    const name     = tds[1]?.textContent.trim();
+    const date     = tds[2]?.textContent.trim();
+    const shift    = Number(tds[3]?.textContent.trim());
+
+    const inTime   = row.querySelector('.in-time')?.value || '';
+    const outTime  = row.querySelector('.out-time')?.value || '';
+    const present  = row.querySelector('.present-time')?.value || '';
+
+    console.log(`Row ${i}`, { labourId, date, shift, inTime, outTime, present });
+
+    if (!labourId || !date) return;
+
+    const docId = `${labourId}_${date}`;
+    const ref = db.collection('shortlists').doc(docId);
+
+    batch.set(ref, {
+      labourId,
+      name,
+      date,
+      shift,
+      inTime,
+      outTime,
+      presentTime: present,
+      month,
+      savedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  });
+
+  try {
+    await batch.commit();
+    alert('✅ Shortlist saved to Firestore');
+    console.log('✅ Firestore batch committed');
+  } catch (err) {
+    alert('❌ Save failed');
+    console.error('Firestore error:', err);
+  }
+}
+
+window.addEventListener('load', () => {
+  const btn = document.getElementById('saveShortlist');
+  if (!btn) {
+    console.error('❌ Save Shortlist button not found');
+    return;
+  }
+
+  btn.addEventListener('click', () => {
+    console.log('✅ Save Shortlist clicked');
+    saveShortlistToFirestore();
+  });
+});
+function exportShortlistPDF() {
+  const rows = document.querySelectorAll('#shortlistTable tbody tr');
+  if (!rows.length) {
+    alert('No shortlist data');
+    return;
+  }
+
+  let html = `
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Shortlist</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin:20px; }
+  h2 { text-align:center; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { border:1px solid #000; padding:6px; text-align:center; }
+  th { background:#eee; }
+</style>
+</head>
+<body>
+
+<h2>SHORTLIST – ${$('ownerMonth').value}</h2>
+
+<table>
+<thead>
+<tr>
+  <th>ID NO</th>
+  <th>NAME</th>
+  <th>DATE</th>
+  <th>SHIFT</th>
+  <th>IN TIME</th>
+  <th>OUT TIME</th>
+  <th>PRESENT TIME</th>
+</tr>
+</thead>
+<tbody>
+`;
+
+  rows.forEach(r => {
+    const tds = r.querySelectorAll('td');
+    const inTime = r.querySelector('.in-time')?.value || '';
+    const outTime = r.querySelector('.out-time')?.value || '';
+    const present = r.querySelector('.present-time')?.value || '';
+
+    html += `
+<tr>
+  <td>${tds[0].innerText}</td>
+  <td>${tds[1].innerText}</td>
+  <td>${tds[2].innerText}</td>
+  <td>${tds[3].innerText}</td>
+  <td>${inTime}</td>
+  <td>${outTime}</td>
+  <td>${present}</td>
+</tr>`;
+  });
+
+  html += `
+</tbody>
+</table>
+
+<script>
+  window.onload = function() {
+    window.print();
+  }
+<\/script>
+
+</body>
+</html>
+`;
+
+  const win = window.open('', '_blank');
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
 
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
+
 
 
 
