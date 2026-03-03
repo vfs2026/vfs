@@ -228,7 +228,7 @@
     
     <div id="tabContainer">
         <button class="tab-btn active" data-tab="attendance">Attendance & Shifts</button>
-          <button class="tab-btn" data-tab="advances">Advances</button>
+        
         <button class="tab-btn" data-tab="salary">Salary Sheet</button>
     </div>
 
@@ -291,7 +291,6 @@
   <input type="checkbox" id="useCustomDate">
   Use Date
 </label>
-
 <input type="number"
        id="jumpDate"
        min="1"
@@ -299,8 +298,8 @@
        value="1"
        style="width:60px"
        title="Date to jump (1–31)">
-<div id="advancesTabContent" class="tab-content card hidden">
 
+    <div id="advancesTabContent" class="tab-content card hidden">
         <div class="card" id="advancesCard" style="margin-top:0">
           <h3>Advances Management</h3>
           <div style="display:flex;align-items:center;gap:8px">
@@ -337,6 +336,7 @@
           </div>
         </div>
     </div>
+
 
 
     <div id="salaryTabContent" class="tab-content card hidden">
@@ -835,7 +835,7 @@ async function collectAttendanceForMonth(month){
 /* Tab Switching Logic */
 const tabContentMap = {
     attendance: $('attendanceTabContent'),
-    advances: $('advancesTabContent'),
+   
     salary: $('salaryTabContent')
 };
 
@@ -854,9 +854,7 @@ function switchTab(tabName) {
         // 3. Trigger initial load/render logic for the tab if necessary
         if (tabName === 'attendance') {
             generateOwnerTable(false); // Force load attendance table on switch
-        } else if (tabName === 'advances') {
-            renderAdvances();
-        } else if (tabName === 'salary') {
+        }  else if (tabName === 'salary') {
             renderSalarySheet();
         }
     }
@@ -873,11 +871,10 @@ document.querySelectorAll('.tab-btn').forEach(button => {
 /* Init owner view: fetch labours to render */
 async function initOwnerView(){
   $('ownerMonth').value = (new Date()).toISOString().slice(0,7);
-  $('advMonth').value = $('ownerMonth').value;
+
   $('salaryMonth').value = $('ownerMonth').value;
   await renderLabourList();
-  await populateAdvSelect();
-  
+
   // Start on the attendance tab
   switchTab('attendance'); 
   // Generate the table now that the month is set
@@ -1161,11 +1158,8 @@ function enableLivePresentCalculation() {
 // ===============================
 $('ownerMonth').addEventListener('change', () => {
   const month = $('ownerMonth').value;
-
   if (month) {
-    // Sync to Salary & Advances
     $('salaryMonth').value = month;
-    $('advMonth').value = month;
   }
 });
 
@@ -1321,7 +1315,7 @@ function clearAdvForm() {
 $('clearAdv').onclick = clearAdvForm; 
 
 
-$('showAdv').onclick = renderAdvances;
+
 
 async function renderAdvances(){
   const month = $('advMonth').value || $('ownerMonth').value;
@@ -1401,7 +1395,7 @@ for (const item of salaryData) {
   tbody.appendChild(tr);
 }
 
-  await populateAdvSelect();
+
   scrollToElement($('advancesCard'));
 }
 
@@ -2869,16 +2863,14 @@ $('exportShiftPDF').onclick = exportShiftPDF;
 $('exportSalaryCSV').onclick = exportSalaryCSV;
 $('exportSalaryXLS').onclick = exportSalaryXLS;
 $('exportSalaryPDF').onclick = exportSalaryPDF;
-$('exportAdvCSV').onclick = exportAdvCSV;
-$('exportAdvXLS').onclick = exportAdvXLS;
-$('exportAdvPDF').onclick = exportAdvPDF;
+
 
 
 /* init on load - we only call renderLabourList and populateAdvSelect here as initOwnerView handles the first tab switch */
 window.addEventListener('load', async ()=>{ 
   try{ 
     await renderLabourList(); 
-    await populateAdvSelect(); 
+  
   }catch(e){ 
     console.warn('Init load: ', e.message); 
   } 
@@ -3255,8 +3247,6 @@ function exportShortlistPDF() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
-
 
 
 
