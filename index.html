@@ -228,7 +228,7 @@
     
     <div id="tabContainer">
         <button class="tab-btn active" data-tab="attendance">Attendance & Shifts</button>
-        <button class="tab-btn" data-tab="advances">Advances</button>
+          <button class="tab-btn" data-tab="advances">Advances</button>
         <button class="tab-btn" data-tab="salary">Salary Sheet</button>
     </div>
 
@@ -299,8 +299,8 @@
        value="1"
        style="width:60px"
        title="Date to jump (1–31)">
+<div id="advancesTabContent" class="tab-content card hidden">
 
-    <div id="advancesTabContent" class="tab-content card hidden">
         <div class="card" id="advancesCard" style="margin-top:0">
           <h3>Advances Management</h3>
           <div style="display:flex;align-items:center;gap:8px">
@@ -394,7 +394,11 @@
 <th>ESI</th>
 <th>P/F</th>
 <th>Debit</th>
-<th>JVC</th><th>Other</th><th>Payment Mode</th><th>Paid Salary</th><th>Exclude</th><th>Remarks/Sign</th>
+<th>JVC</th>
+<th>Other</th>
+<th>Bonus</th>   <!-- ADD THIS -->
+<th>Payment Mode</th>
+<th>Paid Salary</th><th>Exclude</th><th>Remarks/Sign</th>
             </tr></thead><tbody></tbody></table>
           </div>
           <p class="small muted">Paid = TotalAmt − (MonthlyAdvance + Mess + U/F + P/F + Debit + JVC + Other). Owner may override Paid before saving.</p>
@@ -1370,8 +1374,25 @@ for (const item of salaryData) {
 <td><input class="sal-uf sal-editable" type="number" step="0.01" value="${uf.toFixed(2)}"></td>
 <td><input class="sal-debit sal-editable" type="number" step="0.01" value="${debit.toFixed(2)}"></td>
 <td><input class="sal-jvc sal-editable" type="number" step="0.01" value="${jvc.toFixed(2)}"></td>
-<td><input class="sal-other sal-editable" type="number" step="0.01" value="${other.toFixed(2)}"></td>
-<td><input value="${l.paymentMode || 'Cash'}" readonly style="width:90px;background:#f5f7fb"></td>
+<td><input class="sal-other sal-editable"
+           type="number"
+           step="0.01"
+           value="${other.toFixed(2)}">
+</td>
+
+<td>
+  <input class="sal-bonus sal-editable"
+         type="number"
+         step="0.01"
+         value="${Number(saved.bonus || 0).toFixed(2)}">
+</td>
+
+<td>
+  <input class="sal-paymentMode"
+       value="${l.paymentMode || 'Cash'}"
+       readonly
+       style="width:90px;background:#f5f7fb">
+</td>
 <td><input class="sal-paid readonly" value="${paidToShow.toFixed(2)}" readonly style="width:110px;background:#f5f7fb"></td>
 <td><input type="checkbox" class="sal-exclude" ${saved.excludeFromExport ? 'checked' : ''}></td>
 <td><input class="sal-remarks sal-editable" value="${saved.remarks || ''}"></td>
@@ -1524,20 +1545,31 @@ const other = Number(tr.querySelector('.sal-other')?.value) || 0;
     const paid = Number(tr.querySelector('.sal-paid').value) || 0; // Read user-overridden or calculated Paid
     const remarks = tr.querySelector('.sal-remarks').value || '';
 const payload = {
-  amtPerShift: Number(tr.querySelector('.sal-amt').value),   // ✅ CRITICAL
-paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
- // ✅ CRITICAL
-excludeFromExport: tr.querySelector('.sal-exclude')?.checked || false,
-
+  amtPerShift,
   totalShift,
   totalAmt,
   monthlyAdvance,
-  mess, uf,pf1,esi, pf, debit, jvc, other,
+
+  mess,
+  uf,
+  pf1,
+  esi,
+  pf,
+  debit,
+  jvc,
+  other,
+
+  bonus: Number(tr.querySelector('.sal-bonus')?.value) || 0,
+
   paid,
+
+  paymentMode: tr.querySelector('.sal-paymentMode')?.value || '',
+
+  excludeFromExport: tr.querySelector('.sal-exclude')?.checked || false,
   remarks,
+
   savedAt: firebase.firestore.FieldValue.serverTimestamp()
 };
-
 
     
     const docId = `${id}_${month}`;
@@ -1622,67 +1654,57 @@ let totalCash = 0;
   - other
 );
 function recalcSalaryTotals() {
+
   let totalAc = 0;
   let totalWithinAc = 0;
   let totalCash = 0;
 
-  document.querySelectorAll('#salaryTable tbody tr').forEach(tr => {
-    const isExcluded = tr.querySelector('.sal-exclude')?.checked;
-    if (isExcluded) return;   // 🚫 ignore excluded row
+  document.querySelectorAll('#salaryTable tbody tr')
+    .forEach(tr => {
 
-    const paid = Number(tr.querySelector('.sal-paid')?.value) || 0;
-    if (paid <= 0) return;
+      const paid =
+        parseFloat(tr.querySelector('.sal-paid')?.value) || 0;
 
-    const mode =
-      tr.querySelector('td:nth-child(15) input')?.value || 'Cash';
+      const mode =
+        tr.querySelector('.sal-paymentMode')?.value || 'Cash';
 
-    if (mode === 'A/c') totalAc += paid;
-    else if (mode === 'Within A/c') totalWithinAc += paid;
-    else totalCash += paid;
-  });
+      const excluded =
+        tr.querySelector('.sal-exclude')?.checked;
+
+      if (!excluded && paid > 0) {
+
+        if (mode === 'A/c') {
+          totalAc += paid;
+        } 
+        else if (mode === 'Within A/c') {
+          totalWithinAc += paid;
+        } 
+        else {
+          totalCash += paid;
+        }
+
+      }
+
+    });
+
+  const grandTotal = totalAc + totalWithinAc + totalCash;
 
   const box = document.getElementById('salaryTotalsBox');
-  if (!box) return;
 
-  const grandTotal = totalAc + totalWithinAc + totalCash;
-
-  box.innerHTML = `
-    <div>A/c Total : ₹ ${totalAc.toFixed(2)}</div>
-    <div>Within A/c Total : ₹ ${totalWithinAc.toFixed(2)}</div>
-    <div>Cash Total : ₹ ${totalCash.toFixed(2)}</div>
-    <hr style="margin:6px 0">
-    <div style="font-size:16px">
-      GRAND TOTAL : ₹ ${grandTotal.toFixed(2)}
-    </div>
-  `;
-}
-
-// ✅ ADD TO PAYMENT MODE TOTALS
-const isExcluded =
-  saved.excludeFromExport === true;
-
-if (!isExcluded && paidToShow > 0) {
-  if (l.paymentMode === 'A/c') {
-    totalAc += paidToShow;
-  } else if (l.paymentMode === 'Within A/c') {
-    totalWithinAc += paidToShow;
-  } else {
-    totalCash += paidToShow;
+  if (box) {
+    box.innerHTML =
+      `<div>A/c Total : ₹ ${totalAc.toFixed(2)}</div>
+       <div>Within A/c Total : ₹ ${totalWithinAc.toFixed(2)}</div>
+       <div>Cash Total : ₹ ${totalCash.toFixed(2)}</div>
+       <hr style="margin:6px 0">
+       <div style="font-size:16px">
+         GRAND TOTAL : ₹ ${grandTotal.toFixed(2)}
+       </div>`;
   }
 }
+// ✅ ADD TO PAYMENT MODE TOTALS
 
-const box = document.getElementById('salaryTotalsBox');
 
-if (box) {
-  const grandTotal = totalAc + totalWithinAc + totalCash;
-
-  box.innerHTML =
-    '<div>A/c Total : ₹ ' + totalAc.toFixed(2) + '</div>' +
-    '<div>Within A/c Total : ₹ ' + totalWithinAc.toFixed(2) + '</div>' +
-    '<div>Cash Total : ₹ ' + totalCash.toFixed(2) + '</div>' +
-    '<hr style="margin:6px 0">' +
-    '<div style="font-size:16px">GRAND TOTAL : ₹ ' + grandTotal.toFixed(2) + '</div>';
-}
 
     const tr = document.createElement('tr');
    tr.innerHTML = `
@@ -1756,18 +1778,25 @@ if (box) {
 </td>
 
 <td>
-  <input value="${l.paymentMode || 'Cash'}"
-         readonly
-         style="width:90px;background:#f5f7fb">
+  <input class="sal-bonus sal-editable"
+         type="number"
+         step="0.01"
+         value="${Number(saved.bonus || 0).toFixed(2)}">
+</td>
+
+<td>
+ <input class="sal-paymentMode"
+       value="${l.paymentMode || 'Cash'}"
+       readonly
+       style="width:90px;background:#f5f7fb">
 </td>
 
 <td>
   <input class="sal-paid readonly"
-         value="${paidToShow.toFixed(2)}"
+         value="${Math.round(paidToShow)}"
          readonly
          style="width:110px;background:#f5f7fb">
 </td>
-
 <td>
   <input type="checkbox"
          class="sal-exclude"
@@ -1877,11 +1906,12 @@ if (pfInput) {
   const debit = Number(row.querySelector('.sal-debit').value) || 0;
   const jvc = Number(row.querySelector('.sal-jvc').value) || 0;
   const other = Number(row.querySelector('.sal-other').value) || 0;
+const bonus = Number(row.querySelector('.sal-bonus')?.value) || 0;
 
   // compute
   const totalAmt = amtPerShift * totalShift;
-  const deductions = monthlyAdvance + mess + uf + pf + debit + jvc + other;
-  const calcPaid = totalAmt - deductions;
+ const deductions = monthlyAdvance + mess + uf + pf + debit + jvc + other;
+const calcPaid = totalAmt - deductions + bonus;
 
   // write back formatted values
   const totalAmtInp = row.querySelector('.sal-totalAmt');
@@ -1889,7 +1919,7 @@ if (pfInput) {
 
   const paidInp = row.querySelector('.sal-paid');
   if(paidInp){
-  paidInp.value = Number(calcPaid).toFixed(2);}
+ paidInp.value = Math.round(calcPaid);}
 
 
   // ensure amtPerShift remains nicely formatted
@@ -2030,8 +2060,9 @@ async function collectSalaryForMonth(month){
       debit: tr.querySelector('.sal-debit').value,
       jvc: tr.querySelector('.sal-jvc').value,
       other: tr.querySelector('.sal-other').value,
-      paymentMode: tr.querySelector('td:nth-child(15) input')?.value || '',
-      paidSalary: tr.querySelector('.sal-paid').value,
+    paymentMode: tr.querySelector('.sal-paymentMode')?.value || '',
+ bonus: tr.querySelector('.sal-bonus')?.value || 0,
+      paidSalary: Math.round(Number(tr.querySelector('.sal-paid').value) || 0),
       remarks: tr.querySelector('.sal-remarks').value
     });
   });
@@ -2114,245 +2145,168 @@ function formatMonthName(monthStr){
 
 async function exportSalaryPDF(){
   const month = $('salaryMonth').value || $('ownerMonth').value;
+
   if(!month){ alert('Select month'); return; }
 
   const rows = await collectSalaryForMonth(month);
-// 🔁 ORDER: A/c FIRST, Cash AFTER
+// 🔁 ORDER BY PAYMENT MODE
 const acRows = rows.filter(r => r.paymentMode === 'A/c');
 const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
 const cashRows = rows.filter(r => r.paymentMode === 'Cash');
 
 const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
-
-// ===============================
-// 🔢 TOTAL PAID CALCULATION (PDF ONLY)
-// ===============================
-let totalAcPaid = 0;
-let totalCashPaid = 0;
-let totalWithinAcPaid = 0;
-
-orderedRows.forEach(r => {
-  const paidRaw = Number(r.paidSalary) || 0;
-
-// ✅ ADD ONLY IF POSITIVE
-if (paidRaw > 0) {
-  if (r.paymentMode === 'A/c') {
-    totalAcPaid += paidRaw;
-  } else if (r.paymentMode === 'Within A/c') {
-    totalWithinAcPaid += paidRaw;
-  } else {
-    totalCashPaid += paidRaw;
-  }
-}
-
-
-});
-const grandTotal =
-  totalAcPaid + totalWithinAcPaid + totalCashPaid;
-
-
   if(rows.length === 0){
     alert('No salary data');
     return;
   }
 
-  const ROWS_PER_PAGE = 30; // SAFE LIMIT
-  let pages = [];
-for(let i = 0; i < orderedRows.length; i += ROWS_PER_PAGE){
-  pages.push(orderedRows.slice(i, i + ROWS_PER_PAGE));
-}
-
-let html = `
-<div id="pdfRoot">
-<style>
-@page {
-  size: A4 landscape;
-  margin: 0;
-}
-
-html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-/* WRAPPER TO CONTROL POSITION */
-.page {
-  width: 297mm;
-  height: 210mm;
-  padding: 6mm;
-  box-sizing: border-box;
-
-  /* ✅ CENTER FIX */
-  margin: 0 auto;
-
-  /* REMOVE SCALE SHIFT */
-  transform: none;
-}
-
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  margin: 6px auto 0 auto;  /* ✅ CENTER TABLE */
-  font-size: 9.5px;
-}
-
-
-th, td {
-  border: 1px solid #000;
-  padding: 3px 2px;
-  text-align: center;
-  word-break: break-word;
-}
-
-/* HEADER */
-th {
-  background: #eee;
-  font-weight: bold;
-}
-
-/* COLUMN WIDTHS (CRITICAL) */
-th:nth-child(1),  td:nth-child(1)  { width: 28px; }
-th:nth-child(2),  td:nth-child(2)  { width: 45px; }
-th:nth-child(3),  td:nth-child(3)  { width: 115px; }
-th:nth-child(4),  td:nth-child(4)  { width: 55px; }
-th:nth-child(5),  td:nth-child(5)  { width: 55px; }
-th:nth-child(6),  td:nth-child(6)  { width: 60px; }
-th:nth-child(7),  td:nth-child(7)  { width: 45px; }
-
-th:nth-child(10), td:nth-child(10) { width: 45px; }
-th:nth-child(11), td:nth-child(11) { width: 45px; }
-th:nth-child(12), td:nth-child(12) { width: 45px; }
-th:nth-child(13), td:nth-child(13) { width: 45px; }
-th:nth-child(14), td:nth-child(14) { width: 65px; }
-th:nth-child(15), td:nth-child(15) { width: 40px; }
-th:nth-child(16), td:nth-child(16) { width: 150px; text-align:left; }
-
-/* PAGE BREAK */
-.page-break {
-  page-break-after: always;
-}
-.page-break {
-  page-break-after: always;
-}
-</style>
-
-  `;
-pages.forEach((pageRows, pageIndex) => {
-
-if(pageIndex === 0){
-  html += `
-  <div style="text-align:center; font-weight:bold; margin-bottom:6px;">
-    <div style="font-size:18px; letter-spacing:1px;">
-      VEERANAR FINISHERS
-    </div>
-    <div style="font-size:14px; margin-top:4px;">
+  let html = `
+ <div style="
+  font-family:Arial;
+  padding:0;
+  margin:0;
+"><h2 style="text-align:center;margin:0 0 8px 0;padding:0;">
+      VEERANAR FINISHERS<br>
       MONTHLY SALARY ${formatMonthName(month)}
-    </div>
-  </div>
+    </h2>
 
-  <!-- 🔢 TOTAL SUMMARY (PDF ONLY) -->
-<div style="
-  display:flex;
-  align-items:center;
-  font-size:11px;
-  margin:6px 0 8px 0;
-  padding:6px;
-  border:1px solid #000;
-">
-  <div style="flex:1; text-align:left;">
-    <strong>A/c Paid :</strong> ₹${totalAcPaid.toFixed(2)}
-  </div>
-<div style="flex:1; text-align:center;">
-  <strong>Within A/c Paid :</strong> ₹${totalWithinAcPaid.toFixed(2)}
-</div>
+    <table style="
+      width:100%;
+      border-collapse:collapse;
+      font-size:11px;
 
-  <div style="flex:1; text-align:center;">
-    <strong>Cash Paid :</strong> ₹${totalCashPaid.toFixed(2)}
-  </div>
-
-  <div style="flex:1; text-align:right; padding-right:60px;">
-    <strong>Total Paid :</strong> ₹${grandTotal.toFixed(2)}
-  </div>
-</div>
-
-  `;
-}
-
-
-  html += `
-  <div class="page">
-    <table>
-  ${pageIndex === 0 ? `
-<thead>
-  <tr>
-    <th>S.No</th><th>ID</th><th>Name</th>
-    <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
-    <th>Advance</th><th>Mess</th><th>U/F</th>
-
-<th>P/F</th>
-<th>Debit</th>
-<th>JVC</th><th>Other</th>
-    <th>Paid</th><th>A/c</th><th>Remark</th>
-  </tr>
-</thead>` : ``}
+ page-break-inside:auto;
+    ">
+      <thead>
+        <tr>
+          <th>S.No</th>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Amt</th>
+          <th>Shift</th>
+          <th>Total</th>
+          <th>Advance</th>
+          <th>Mess</th>
+          <th>U/F</th>
+          <th>P/F</th>
+          <th>Debit</th>
+          <th>JVC</th>
+          <th>Other</th>
+          <th>Bonus</th>
+          <th>Paid</th>
+          <th>Mode</th>
+        </tr>
+      </thead>
       <tbody>
+  `;
 
-        ${pageRows.map(r=>`
-  <tr>
-    <td>${r.sno}</td>
-    <td>${r.id}</td>
-    <td>${r.name}</td>
-    <td>${r.amtPerShift}</td>
-    <td>${r.totalShift}</td>
-    <td>${r.totalAmt}</td>
-    <td>${r.monthlyAdvance}</td>
-    <td>${r.mess}</td>
-    <td>${r.uf}</td>
-    <td>${r.pf}</td>
-    <td>${r.debit}</td>
-    <td>${r.jvc}</td>
-    <td>${r.other}</td>
-    <td>${r.paidSalary}</td>
-    <td>${r.paymentMode || ''}</td>
-    <td>${r.remarks || ''}</td>
-  </tr>
-`).join('')}
+// ===== SECTION FUNCTION =====
+function renderSection(title, data) {
 
-        </tbody>
-      </table>
-    </div>
-    `;
+  if (!data.length) return '';
+
+  let total = 0;
+  let sectionHTML = `
+<tr class="section-header">
+  <td colspan="16" style="text-align:left">
+    ${title}
+  </td>
+</tr>
+`;
+
+  data.forEach(r => {
+
+    total += Number(r.paidSalary) || 0;
+
+    sectionHTML += `
+<tr>
+  <td>${r.sno}</td>
+  <td>${r.id}</td>
+  <td>${r.name}</td>
+  <td>${r.amtPerShift}</td>
+  <td>${r.totalShift}</td>
+  <td>${r.totalAmt}</td>
+  <td>${r.monthlyAdvance}</td>
+  <td>${r.mess}</td>
+  <td>${r.uf}</td>
+  <td>${r.pf}</td>
+  <td>${r.debit}</td>
+  <td>${r.jvc}</td>
+  <td>${r.other}</td>
+  <td>${r.bonus}</td>
+  <td><strong>${r.paidSalary}</strong></td>
+  <td>${r.paymentMode}</td>
+</tr>
+`;
   });
 
-  html += `</div>`;
+  sectionHTML += `
+<tr>
+  <td colspan="14" style="text-align:right;font-weight:bold">
+    ${title} TOTAL
+  </td>
+  <td colspan="2" style="font-weight:bold">
+    ₹ ${total.toFixed(2)}
+  </td>
+</tr>
+`;
 
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  document.body.appendChild(div);
-
-html2pdf()
-  .from(div)
-  .set({
-    margin: [8, 8, 8, 8],
-    filename: `salary_sheet_${month}.pdf`,
-    jsPDF: { orientation: 'landscape', format: 'a4', unit: 'mm' },
-  html2canvas: {
-  scale: 2,                // 🔑 HIGH DPI
-  scrollX: 0,
-  scrollY: 0,
-  windowWidth: 1600,
-  letterRendering: true,
-  useCORS: true
+  return sectionHTML;
 }
 
+// ===== ADD SECTIONS =====
+html += renderSection('A/C PAYMENT', acRows);
+html += renderSection('WITHIN A/C PAYMENT', withinAcRows);
+html += renderSection('CASH PAYMENT', cashRows);
+
+// ===== GRAND TOTAL =====
+const grandTotal =
+  acRows.reduce((s,r)=>s+Number(r.paidSalary||0),0) +
+  withinAcRows.reduce((s,r)=>s+Number(r.paidSalary||0),0) +
+  cashRows.reduce((s,r)=>s+Number(r.paidSalary||0),0);
+
+html += `
+<tr>
+  <td colspan="14" style="text-align:right;font-size:14px;font-weight:bold">
+    GRAND TOTAL
+  </td>
+  <td colspan="2" style="font-size:14px;font-weight:bold">
+    ₹ ${grandTotal.toFixed(2)}
+  </td>
+</tr>
+`;
+  html += `
+      </tbody>
+    </table>
+  </div>
+  `;
+
+  const element = document.createElement('div');
+  element.innerHTML = html;
+  document.body.appendChild(element);
+
+ await html2pdf()
+  .from(element)
+  .set({
+    margin: [10, 10, 10, 10],   // more safe margin
+    filename: `salary_sheet_${month}.pdf`,
+    image: { type: 'jpeg', quality: 1 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      scrollY: 0
+    },
+    pagebreak: {
+      mode: ['avoid-all', 'css', 'legacy']
+    },
+    jsPDF: {
+      unit: 'mm',
+      format: 'a4',
+      orientation: 'landscape'
+    }
   })
-    .save()
-    .then(() => div.remove());
+  .save();
+  element.remove();
 }
 
 /* ===== labour management (owner-only) ===== */
@@ -3203,7 +3157,41 @@ function exportShortlistPDF() {
   h2 { text-align:center; margin-bottom:12px; }
   table { width:100%; border-collapse:collapse; font-size:12px; }
   th, td { border:1px solid #000; padding:6px; text-align:center; }
+<style>
+  table { 
+    page-break-inside:auto;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+</style>
   th { background:#eee; }
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  .section-header {
+    page-break-before: auto;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    background: #ddd;
+    font-weight: bold;
+  }
 </style>
 </head>
 <body>
@@ -3267,20 +3255,6 @@ function exportShortlistPDF() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
