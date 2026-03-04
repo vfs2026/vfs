@@ -1603,13 +1603,14 @@ async function renderSalarySheet(){
   }
 
 
-const labs = (await fetchAllLabours()).sort((a, b) =>
+const labs = await fetchAllLabours();
+labs.sort((a, b) =>
   ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[a.paymentMode] || 9) -
   ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[b.paymentMode] || 9)
 );
 
   const tbody = document.querySelector('#salaryTable tbody');
-tbody.innerHTML = '';   // 🔥 CLEAR OLD ROWS BEFORE RENDERING
+tbody.innerHTML = '<tr><td colspan="19">Loading salary...</td></tr>';
 
 
 // ===============================
@@ -1620,7 +1621,10 @@ let totalWithinAc = 0;
 let totalCash = 0;
 
   for(let i=0;i<labs.length;i++){
-    const l = labs[i];
+   labs.map(async (l,i)=>{
+
+    const att = await fetchAttendance(l.id, month);
+    const saved = await fetchSalary(l.id, month) || {};
     const att = await fetchAttendance(l.id, month);
     const totalShift = Object.values(att.shifts || {}).reduce((s,v)=> s + (Number(v)||0), 0);
     const saved = await fetchSalary(l.id, month) || {};
@@ -1648,7 +1652,6 @@ let totalCash = 0;
   - other
 );
 function recalcSalaryTotals() {
-
   let totalAc = 0;
   let totalWithinAc = 0;
   let totalCash = 0;
@@ -1667,15 +1670,9 @@ function recalcSalaryTotals() {
 
       if (!excluded && paid > 0) {
 
-        if (mode === 'A/c') {
-          totalAc += paid;
-        } 
-        else if (mode === 'Within A/c') {
-          totalWithinAc += paid;
-        } 
-        else {
-          totalCash += paid;
-        }
+        if (mode === 'A/c') totalAc += paid;
+        else if (mode === 'Within A/c') totalWithinAc += paid;
+        else totalCash += paid;
 
       }
 
@@ -3247,7 +3244,6 @@ function exportShortlistPDF() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
