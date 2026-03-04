@@ -1621,10 +1621,7 @@ let totalWithinAc = 0;
 let totalCash = 0;
 
   for(let i=0;i<labs.length;i++){
-   labs.map(async (l,i)=>{
-
-    const att = await fetchAttendance(l.id, month);
-    const saved = await fetchSalary(l.id, month) || {};
+    const l = labs[i];
     const att = await fetchAttendance(l.id, month);
     const totalShift = Object.values(att.shifts || {}).reduce((s,v)=> s + (Number(v)||0), 0);
     const saved = await fetchSalary(l.id, month) || {};
