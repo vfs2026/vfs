@@ -2926,6 +2926,27 @@ if (useCustom && jumpDateInput && jumpDateInput.value) {
 });
 // ===== ENTER in Salary search → jump to selected column =====
 document.getElementById('salarySearch').addEventListener('keydown', function (e) {
+document.getElementById('salarySearch').addEventListener('change', function () {
+
+  const useJump = document.getElementById('useSalaryJump').checked;
+  if (!useJump) return;
+
+  const colClass = document.getElementById('salaryJumpColumn').value;
+
+  const rows = Array.from(document.querySelectorAll('#salaryTable tbody tr'))
+    .filter(r => r.style.display !== 'none');
+
+  if (!rows.length) return;
+
+  const row = rows[0];
+  const targetInput = row.querySelector('.' + colClass);
+
+  if (targetInput) {
+    targetInput.focus();
+    setTimeout(() => targetInput.select(), 0);
+  }
+
+});
   if (e.key !== 'Enter') return;
 
   e.preventDefault();
