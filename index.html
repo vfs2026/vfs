@@ -1603,14 +1603,13 @@ async function renderSalarySheet(){
   }
 
 
-const labs = await fetchAllLabours();
-labs.sort((a, b) =>
+const labs = (await fetchAllLabours()).sort((a, b) =>
   ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[a.paymentMode] || 9) -
   ({ 'A/c': 1, 'Within A/c': 2, 'Cash': 3 }[b.paymentMode] || 9)
 );
 
   const tbody = document.querySelector('#salaryTable tbody');
-tbody.innerHTML = '<tr><td colspan="19">Loading salary...</td></tr>';
+tbody.innerHTML = '';   // 🔥 CLEAR OLD ROWS BEFORE RENDERING
 
 
 // ===============================
@@ -1649,6 +1648,7 @@ let totalCash = 0;
   - other
 );
 function recalcSalaryTotals() {
+
   let totalAc = 0;
   let totalWithinAc = 0;
   let totalCash = 0;
@@ -1667,9 +1667,15 @@ function recalcSalaryTotals() {
 
       if (!excluded && paid > 0) {
 
-        if (mode === 'A/c') totalAc += paid;
-        else if (mode === 'Within A/c') totalWithinAc += paid;
-        else totalCash += paid;
+        if (mode === 'A/c') {
+          totalAc += paid;
+        } 
+        else if (mode === 'Within A/c') {
+          totalWithinAc += paid;
+        } 
+        else {
+          totalCash += paid;
+        }
 
       }
 
