@@ -2947,6 +2947,34 @@ document.getElementById('salarySearch').addEventListener('change', function () {
   }
 
 });
+document.querySelector('#salaryTable tbody').addEventListener('keydown', function(e){
+
+  if(e.key !== 'Enter') return;
+
+  const target = e.target;
+
+  // check if it is one of the salary inputs
+  if(
+    target.classList.contains('sal-paid') ||
+    target.classList.contains('sal-advance') ||
+    target.classList.contains('sal-other') ||
+    target.classList.contains('sal-short') ||
+    target.classList.contains('sal-extra')
+  ){
+
+    e.preventDefault();
+
+    const searchBox = document.getElementById('salarySearch');
+
+    searchBox.focus();
+
+    setTimeout(() => {
+      searchBox.select();
+    },0);
+
+  }
+
+});
   if (e.key !== 'Enter') return;
 
   e.preventDefault();
