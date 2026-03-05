@@ -2966,12 +2966,17 @@ document.querySelector('#salaryTable tbody').addEventListener('keydown', functio
 
     const searchBox = document.getElementById('salarySearch');
 
-    searchBox.focus();
+   searchBox.focus();
 
-    setTimeout(() => {
-      searchBox.select();
-    },0);
+setTimeout(() => {
+  searchBox.setSelectionRange(0, searchBox.value.length);
+},120);
 
+document.getElementById('salarySearch').addEventListener('focus', function(){
+  setTimeout(()=>{
+    this.setSelectionRange(0, this.value.length);
+  },100);
+});
   }
 
 });
