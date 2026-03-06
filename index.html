@@ -2030,18 +2030,20 @@ window.open(url, '_blank');
 /* Salary Data Collection Function (IMPLEMENTED) */
 /* Salary Data Collection Function (READ FROM SCREEN – FIXED) */
 async function collectSalaryForMonth(month){
+
   const rows = [];
   const trs = document.querySelectorAll('#salaryTable tbody tr');
 
-  trs.forEach((tr, i) => {
+  trs.forEach(tr => {
+
     const isExcluded = tr.querySelector('.sal-exclude')?.checked;
-    if (isExcluded) return; // 🚫 skip export
+
+    if(isExcluded) return; // 🔴 SKIP excluded rows
 
     const nameCell = tr.querySelector('.sticky-name')?.textContent || '';
     const parts = nameCell.split(' - ');
 
     rows.push({
-      sno: i + 1,
       id: tr.querySelector('.sal-amt')?.dataset.id || '',
       name: parts[1] || '',
       amtPerShift: tr.querySelector('.sal-amt').value,
@@ -2054,16 +2056,21 @@ async function collectSalaryForMonth(month){
       debit: tr.querySelector('.sal-debit').value,
       jvc: tr.querySelector('.sal-jvc').value,
       other: tr.querySelector('.sal-other').value,
-    paymentMode: tr.querySelector('.sal-paymentMode')?.value || '',
- bonus: tr.querySelector('.sal-bonus')?.value || 0,
+      bonus: tr.querySelector('.sal-bonus').value,
+      paymentMode: tr.querySelector('.sal-paymentMode')?.value || '',
       paidSalary: Math.round(Number(tr.querySelector('.sal-paid').value) || 0),
       remarks: tr.querySelector('.sal-remarks').value
     });
+
+  });
+
+  // 🔢 Re-number S.No after removing excluded rows
+  rows.forEach((r,i)=>{
+    r.sno = i + 1;
   });
 
   return rows;
 }
-
 
 /* Salary Export Functions (IMPLEMENTED) */
 async function exportSalaryCSV(){
@@ -3301,6 +3308,8 @@ function exportShortlistPDF() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
 
 
 
