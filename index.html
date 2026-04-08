@@ -179,7 +179,8 @@
   #ownerTableWrap, #advancesCard > div, #salaryCard > div {
       padding: 14px;
   }
-</style>
+</style><script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -358,7 +359,8 @@
 </label>
 
 <select id="salaryJumpColumn" style="width:140px">
-  <option value="sal-monthlyAdvance">Advance</option>
+ <option value="sal-amt">Amt/Shift</option>
+ <option value="sal-monthlyAdvance">Advance</option>
   <option value="sal-mess">Mess</option>
   <option value="sal-uf">U/F</option>
   <option value="sal-pf1">PF1</option>
@@ -373,6 +375,7 @@
   <button id="exportSalaryCSV">Export CSV</button>
   <button id="exportSalaryXLS">Export XLS</button>
   <button id="exportSalaryPDF">Export PDF</button>
+<input type="file" id="uploadExcel" accept=".xls,.xlsx,image/*">
 </div>
 <div id="salaryTotalsBox"
      style="margin-top:8px;margin-bottom:6px;
@@ -1360,7 +1363,12 @@ for (const item of salaryData) {
   tr.innerHTML = `
 <td class="sticky-id">${i+1}</td>
 <td class="sticky-name">${l.id} - ${l.name}</td>
-<td><input class="sal-amt readonly" data-id="${l.id}" value="${amtPerShift.toFixed(2)}" readonly style="width:90px;background:#f5f7fb"></td>
+<td><input class="sal-amt sal-editable"
+       type="number"
+       step="0.01"
+       data-id="${l.id}"
+       value="${amtPerShift}"
+       style="width:90px"> style="width:90px;background:#f5f7fb"></td>
 <td><input class="sal-totalShift readonly" value="${totalShift.toFixed(2)}" readonly style="width:90px;background:#f5f7fb"></td>
 <td><input class="sal-totalAmt readonly" value="${totalAmt.toFixed(2)}" readonly style="width:110px;background:#f5f7fb"></td>
 <td><input class="sal-monthlyAdvance sal-editable" type="number" step="0.01" value="${monthlyAdvance.toFixed(2)}" style="width:110px"></td>
@@ -1523,6 +1531,12 @@ $('saveSalary').onclick = async ()=>{
     
     // Read current values from inputs
     const amtPerShift = Number(tr.querySelector('.sal-amt').value) || 0;
+// ✅ ALSO UPDATE LABOUR MASTER RATE
+const labourRef = db.collection('labours').doc(id);
+
+batch.update(labourRef, {
+  rate: amtPerShift
+});
     const totalShift = Number(tr.querySelector('.sal-totalShift').value) || 0;
     const totalAmt = Number(tr.querySelector('.sal-totalAmt').value) || 0; // Read calculated value
     const monthlyAdvance = Number(tr.querySelector('.sal-monthlyAdvance').value) || 0; // Read calculated value (from advances)
@@ -1701,17 +1715,18 @@ function recalcSalaryTotals() {
 
 
     const tr = document.createElement('tr');
+tr.dataset.id = l.id;
    tr.innerHTML = `
 <td class="sticky-id">${i+1}</td>
 <td class="sticky-name">${l.id} - ${l.name}</td>
 
 <td>
-  <input class="sal-amt readonly"
-         data-id="${l.id}"
-         value="${amtPerShift.toFixed(2)}"
-         readonly
-         style="width:90px;background:#f5f7fb">
-</td>
+<input class="sal-amt sal-editable"
+       data-id="${l.id}"
+       type="number"
+       step="0.01"
+       value="${amtPerShift}"
+       style="width:90px">
 
 <td>
   <input class="sal-totalShift readonly"
@@ -1917,9 +1932,7 @@ const calcPaid = totalAmt - deductions + bonus;
 
 
   // ensure amtPerShift remains nicely formatted
-  const amtInp = row.querySelector('.sal-amt');
-  if(amtInp) amtInp.value = Number(amtPerShift).toFixed(2);
-}
+  }
 }
 /* ===== ADVANCES export functions (unchanged behavior) ===== */
 async function collectAdvForMonth(month){
@@ -2002,7 +2015,7 @@ tr { page-break-inside: avoid; }
 th, td { border:1px solid #333; padding:4px; text-align:center; }
 th { background:#eee; }
 td.left { text-align:left; padding-left:6px; }
-</style></head><body><h2>Labour Shifts — ${month}</h2>`;
+</head><body><h2>Labour Shifts — ${month}</h2>`;
 
   if(rows.length === 0){ html += '<p>No shift data for selected month.</p>'; } else {
     html += '<table><thead><tr><th>S.No</th><th>User ID</th><th>Name</th>' + days.map(d=>`<th>${d}</th>`).join('') + '<th>Total</th></tr></thead><tbody>';
@@ -3227,7 +3240,6 @@ function exportShortlistPDF() {
   tfoot {
     display: table-footer-group;
   }
-</style>
   th { background:#eee; }
   thead {
     display: table-header-group;
@@ -3303,15 +3315,112 @@ function exportShortlistPDF() {
   win.document.write(html);
   win.document.close();
 }
+document.getElementById('uploadExcel').addEventListener('change', async function(e){
 
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const name = file.name.toLowerCase();
+
+  // --------------------------
+  // EXCEL IMPORT
+  // --------------------------
+  if(name.endsWith('.xls') || name.endsWith('.xlsx')){
+
+    const reader = new FileReader();
+
+    reader.onload = function(evt){
+
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data,{type:'array'});
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet);
+
+      rows.forEach(r=>{
+
+        const id = String(r.ID || r.IdNo || r.Id).trim();
+        const pf = r.PF || r.PF1;
+        const esi = r.ESI;
+        const net = r["Net Salary"] || r["NET SALARY"];
+
+        document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
+
+          if(tr.dataset.id === id){
+
+            const pfInput = tr.querySelector('.sal-pf1');
+            const esiInput = tr.querySelector('.sal-esi');
+            const jvcInput = tr.querySelector('.sal-jvc');
+
+            if(pfInput && pf!==undefined){
+              pfInput.value = pf;
+              pfInput.dispatchEvent(new Event('input'));
+            }
+
+            if(esiInput && esi!==undefined)
+              esiInput.value = esi;
+
+            if(jvcInput && net!==undefined)
+              jvcInput.value = net;
+
+          }
+
+        });
+
+      });
+
+    };
+
+    reader.readAsArrayBuffer(file);
+  }
+
+  // --------------------------
+  // IMAGE OCR IMPORT
+  // --------------------------
+  else if(file.type.startsWith("image/")){
+
+    const result = await Tesseract.recognize(file,'eng');
+    const text = result.data.text;
+console.log(text);
+    const lines = text.split('\n');
+
+    lines.forEach(line=>{
+
+      const parts = line.trim().split(/\s+/);
+
+      if(parts.length >= 4){
+
+        const id = parts[0];
+        const pf = parts[1];
+        const esi = parts[2];
+        const net = parts[3];
+
+        document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
+
+          if(tr.dataset.id === id){
+
+            const pfInput = tr.querySelector('.sal-pf1');
+            const esiInput = tr.querySelector('.sal-esi');
+            const jvcInput = tr.querySelector('.sal-jvc');
+
+            if(pfInput) pfInput.value = pf;
+            if(esiInput) esiInput.value = esi;
+            if(jvcInput) jvcInput.value = net;
+
+          }
+
+        });
+
+      }
+
+    });
+
+  }
+
+});
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
-
-
-
 
 
 
