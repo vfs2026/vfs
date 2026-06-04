@@ -1564,27 +1564,19 @@ $('saveSalary').onclick = async ()=>{
     
     // Read current values from inputs
     const amtPerShift = Number(tr.querySelector('.sal-amt').value) || 0;
-// ✅ ALSO UPDATE LABOUR MASTER RATE
-const labourRef = db.collection('labours').doc(id);
-
-batch.update(labourRef, {
-  rate: amtPerShift
-});
     const totalShift = Number(tr.querySelector('.sal-totalShift').value) || 0;
     const totalAmt = Number(tr.querySelector('.sal-totalAmt').value) || 0; // Read calculated value
     const monthlyAdvance = Number(tr.querySelector('.sal-monthlyAdvance').value) || 0; // Read calculated value (from advances)
-    const mess = Number(tr.querySelector('.sal-mess').value) || 0;
-    const uf = Number(tr.querySelector('.sal-uf').value) || 0;
-  const pf1 = Number(tr.querySelector('.sal-pf1')?.value) || 0;
-const esi = Number(tr.querySelector('.sal-esi')?.value) || 0;
-const pf  = Number(tr.querySelector('.sal-pf')?.value) || 0;
-
-const debit = Number(tr.querySelector('.sal-debit')?.value) || 0;
-const jvc   = Number(tr.querySelector('.sal-jvc')?.value) || 0;
-const other = Number(tr.querySelector('.sal-other')?.value) || 0;
-
-    const paid = Number(tr.querySelector('.sal-paid').value) || 0; // Read user-overridden or calculated Paid
-    const remarks = tr.querySelector('.sal-remarks').value || '';
+    const mess = Number(tr.querySelector('.sal-mess')?.value || 0);
+const uf = Number(tr.querySelector('.sal-uf')?.value || 0);
+const pf1 = Number(tr.querySelector('.sal-pf1')?.value || 0);
+const esi = Number(tr.querySelector('.sal-esi')?.value || 0);
+const pf = Number(tr.querySelector('.sal-pf')?.value || 0);
+const debit = Number(tr.querySelector('.sal-debit')?.value || 0);
+const jvc = Number(tr.querySelector('.sal-jvc')?.value || 0);
+const other = Number(tr.querySelector('.sal-other')?.value || 0);
+const paid = Number(tr.querySelector('.sal-paid')?.value || 0);
+const remarks = tr.querySelector('.sal-remarks')?.value || '';
 const payload = {
   amtPerShift,
   totalShift,
@@ -1624,7 +1616,6 @@ const payload = {
     alert('Save Salary Sheet failed: ' + err.message);
   }
 };
-
 
 /* Ensure the Show Salary button triggers our function */
 $('showSalary').onclick = renderSalarySheet;
@@ -1784,20 +1775,23 @@ tr.dataset.id = l.id;
 </td>
 
 
-<td><input class="sal-mess sal-editable" type="number" step="0.01" value="${mess.toFixed(2)}"></td>
-<td><input class="sal-uf sal-editable" type="number" step="0.01" value="${uf.toFixed(2)}"></td>
+<td>
+  <input class="sal-mess sal-editable" type="number" step="0.01"
+         value="${mess.toFixed(2)}">
+</td>
 
 <td>
-  <input class="sal-pf1 sal-editable"
-         type="number"
-         step="0.01"
+  <input class="sal-uf sal-editable" type="number" step="0.01"
+         value="${uf.toFixed(2)}">
+</td>
+
+<td>
+  <input class="sal-pf1 sal-editable" type="number" step="0.01"
          value="${Number(saved.pf1 || 0).toFixed(2)}">
 </td>
 
 <td>
-  <input class="sal-esi sal-editable"
-         type="number"
-         step="0.01"
+  <input class="sal-esi sal-editable" type="number" step="0.01"
          value="${Number(saved.esi || 0).toFixed(2)}">
 </td>
 
@@ -1805,17 +1799,21 @@ tr.dataset.id = l.id;
   <input class="sal-pf readonly"
          readonly
          style="background:#f5f7fb;width:90px"
-         value="${pf.toFixed(2)}">
+         value="${Number(saved.pf || 0).toFixed(2)}">
 </td>
 
-<td><input class="sal-debit sal-editable" type="number" step="0.01" value="${debit.toFixed(2)}"></td>
-
-<td><input class="sal-jvc sal-editable" type="number" step="0.01" value="${jvc.toFixed(2)}"></td>
+<td>
+  <input class="sal-debit sal-editable" type="number" step="0.01"
+         value="${debit.toFixed(2)}">
+</td>
 
 <td>
-  <input class="sal-other sal-editable"
-         type="number"
-         step="0.01"
+  <input class="sal-jvc sal-editable" type="number" step="0.01"
+         value="${jvc.toFixed(2)}">
+</td>
+
+<td>
+  <input class="sal-other sal-editable" type="number" step="0.01"
          value="${other.toFixed(2)}">
 </td>
 
