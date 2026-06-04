@@ -714,16 +714,24 @@ async function fetchAllLabours(){
 
   const labs = snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(l => {
-      if(l.status === 'inactive' && l.inactiveFrom && l.inactiveFrom <= month){
-        return false;
-      }
-      if(l.activeFrom && l.activeFrom > month){
-        return false;
-      }
-      return true;
-    });
+ .filter(l => {
 
+  // Before first joining
+  if (l.activeFrom && month < l.activeFrom) {
+    return false;
+  }
+
+  // Hidden after leaving
+  if (
+    l.status === 'inactive' &&
+    l.inactiveFrom &&
+    month >= l.inactiveFrom
+  ) {
+    return false;
+  }
+
+  return true;
+})
   // ✅ SORT BY ORDER (VERY IMPORTANT)
   labs.sort((a, b) => {
     const ao = (a.order ?? 999999);
@@ -740,28 +748,45 @@ async function fetchLabourById(id){
   if(!d.exists) return null;
   return {id: d.id, ...d.data()};
 }
-async function saveLabourToFirestore(lab){
+function getMonth(){
+  return new Date().toISOString().slice(0,7);
+}
+async function saveLabourToFirestore(lab) {
   const ref = db.collection('labours').doc(lab.id);
   const doc = await ref.get();
 
-  const payload = {
-    id: lab.id,
-    name: lab.name || '',
-    password: lab.password || '',
-    rate: Number(lab.rate) || 0,
-    paymentMode: lab.paymentMode || 'Cash',
+  if (doc.exists) {
+    // Rejoin existing labour - KEEP old activeFrom
+    await ref.set({
+      name: lab.name || '',
+      password: lab.password || '',
+      rate: Number(lab.rate) || 0,
+      paymentMode: lab.paymentMode || 'Cash',
 
-    // ✅ NEW FIELDS
-    status: lab.status || 'active',          // active | inactive
-    activeFrom: lab.activeFrom || getMonth(),// YYYY-MM
-    inactiveFrom: lab.inactiveFrom || null
-  };
+      status: 'active',
+      inactiveFrom: null,
 
-  if(!doc.exists){
-    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      order: lab.order || 0
+    }, { merge: true });
+
+  } else {
+    // Brand new labour
+    await ref.set({
+      id: lab.id,
+      name: lab.name || '',
+      password: lab.password || '',
+      rate: Number(lab.rate) || 0,
+      paymentMode: lab.paymentMode || 'Cash',
+
+      status: 'active',
+      activeFrom: $('ownerMonth').value || new Date().toISOString().slice(0,7),
+      inactiveFrom: null,
+
+      order: lab.order || 0,
+
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
   }
-
-  await ref.set(payload, { merge:true });
 }
 
 async function deleteLabourFromFirestore(id){
@@ -1032,35 +1057,24 @@ $('loadTable').onclick = async () => {
 async function renderShortlistFromAttendance() {
   const month = $('ownerMonth').value;
   if (!month) return;
-console.log('Attendance sample:', await fetchAttendance('ANY_ID', $('ownerMonth').value));
 
   const tbody = document.querySelector('#shortlistTable tbody');
   if (!tbody) return;
-  tbody.innerHTML = '';
 
-  const labs = await fetchAllLabours();
-
-  for (const lab of labs) {
-   const att = await fetchAttendance(lab.id, month);
-
-for (const [date, shift] of async function renderShortlistFromAttendance() {
-  const month = $('ownerMonth').value;
-  if (!month) return;
-
-  const tbody = document.querySelector('#shortlistTable tbody');
   tbody.innerHTML = '';
 
   const labs = await fetchAllLabours();
 
   for (const lab of labs) {
     const att = await fetchAttendance(lab.id, month);
+
     if (!att || !att.shifts) continue;
 
     for (const day in att.shifts) {
       const shiftVal = Number(att.shifts[day]);
 
-      // ✅ ONLY 0.5 OR 2 SHIFT
       if (shiftVal === 0.5 || shiftVal === 2) {
+
         const fullDate =
           month + '-' + String(day).padStart(2, '0');
 
@@ -1071,14 +1085,11 @@ for (const [date, shift] of async function renderShortlistFromAttendance() {
           <td>${lab.name}</td>
           <td>${fullDate}</td>
           <td>${shiftVal}</td>
+          <td><input class="in-time" type="time"></td>
+          <td><input class="out-time" type="time"></td>
           <td>
-            <input class="in-time" type="time">
-          </td>
-          <td>
-            <input class="out-time" type="time">
-          </td>
-          <td>
-            <input class="present-time" readonly
+            <input class="present-time"
+                   readonly
                    style="background:#f5f7fb;width:90px">
           </td>
         `;
@@ -1089,32 +1100,6 @@ for (const [date, shift] of async function renderShortlistFromAttendance() {
   }
 
   enableLivePresentCalculation();
-}
-
-) {
-  const shiftVal = Number(shift || 0);
-
-  // ✅ ONLY 0.5 OR 2 SHIFT
-  if (shiftVal === 0.5 || shiftVal === 2) {
-    const tr = document.createElement('tr');
-
-    tr.innerHTML = `
-      <td>${lab.id}</td>
-      <td>${lab.name}</td>
-      <td>${date}</td>
-      <td>${shiftVal}</td>
-      <td><input class="in-time"  placeholder="9:00 AM"  style="width:90px"></td>
-      <td><input class="out-time" placeholder="5:30 PM" style="width:90px"></td>
-      <td><input class="present-time" readonly style="width:90px;background:#f5f7fb"></td>
-    `;
-
-    tbody.appendChild(tr);
-  }
-}
-
-  }
-
-  enableLivePresentCalculation(); // 🔴 LIVE CALC
 }
 function parse12HourTimeToMinutes(t) {
   if (!t) return null;
@@ -3421,7 +3406,6 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
