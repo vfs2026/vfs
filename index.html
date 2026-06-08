@@ -1376,8 +1376,7 @@ for (const item of salaryData) {
   const i = item.i;
   const totalShift = item.totalShift;
   const saved = item.saved;
-
-  const amtPerShift = Number(l.rate || 0);
+const amtPerShift = Number(saved.amtPerShift ?? l.rate ?? 0);
   const totalAmt = amtPerShift * totalShift;
 
   const mess = Number(saved.mess||0);
@@ -1400,7 +1399,7 @@ for (const item of salaryData) {
        type="number"
        step="0.01"
        data-id="${l.id}"
-       value="${amtPerShift}"
+value="${Number(saved.amtPerShift ?? l.rate ?? 0).toFixed(2)}"
        style="width:90px"> style="width:90px;background:#f5f7fb"></td>
 <td><input class="sal-totalShift readonly" value="${totalShift.toFixed(2)}" readonly style="width:90px;background:#f5f7fb"></td>
 <td><input class="sal-totalAmt readonly" value="${totalAmt.toFixed(2)}" readonly style="width:110px;background:#f5f7fb"></td>
@@ -1664,7 +1663,7 @@ let totalCash = 0;
     const saved = await fetchSalary(l.id, month) || {};
 
 
-  const amtPerShift = Number(l.rate || 0);
+const amtPerShift = Number(saved.amtPerShift ?? l.rate ?? 0);
 
 
 
@@ -1749,8 +1748,9 @@ tr.dataset.id = l.id;
        data-id="${l.id}"
        type="number"
        step="0.01"
-       value="${amtPerShift}"
+   value="${Number(saved.amtPerShift ?? l.rate ?? 0).toFixed(2)}"
        style="width:90px">
+</td>
 
 <td>
   <input class="sal-totalShift readonly"
@@ -3506,7 +3506,6 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
