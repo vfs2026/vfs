@@ -2086,20 +2086,21 @@ async function collectSalaryForMonth(month){
     rows.push({
       id: tr.querySelector('.sal-amt')?.dataset.id || '',
       name: parts[1] || '',
-      amtPerShift: tr.querySelector('.sal-amt').value,
-      totalShift: tr.querySelector('.sal-totalShift').value,
-      totalAmt: tr.querySelector('.sal-totalAmt').value,
-      monthlyAdvance: tr.querySelector('.sal-monthlyAdvance').value,
-      mess: tr.querySelector('.sal-mess').value,
-      uf: tr.querySelector('.sal-uf').value,
-      pf: tr.querySelector('.sal-pf').value,
-      debit: tr.querySelector('.sal-debit').value,
-      jvc: tr.querySelector('.sal-jvc').value,
-      other: tr.querySelector('.sal-other').value,
-      bonus: tr.querySelector('.sal-bonus').value,
-      paymentMode: tr.querySelector('.sal-paymentMode')?.value || '',
-      paidSalary: Math.round(Number(tr.querySelector('.sal-paid').value) || 0),
-      remarks: tr.querySelector('.sal-remarks').value
+     amtPerShift: tr.querySelector('.sal-amt')?.value || 0,
+totalShift: tr.querySelector('.sal-totalShift')?.value || 0,
+totalAmt: tr.querySelector('.sal-totalAmt')?.value || 0,
+monthlyAdvance: tr.querySelector('.sal-monthlyAdvance')?.value || 0,
+mess: tr.querySelector('.sal-mess')?.value || 0,
+uf: tr.querySelector('.sal-uf')?.value || 0,
+pf: tr.querySelector('.sal-pf')?.value || 0,
+debit: tr.querySelector('.sal-debit')?.value || 0,
+jvc: tr.querySelector('.sal-jvc')?.value || 0,
+other: tr.querySelector('.sal-other')?.value || 0,
+bonus: tr.querySelector('.sal-bonus')?.value || 0,
+paymentMode: tr.querySelector('.sal-paymentMode')?.value || '',
+paidSalary: Math.round(Number(tr.querySelector('.sal-paid')?.value || 0)),
+remarks: tr.querySelector('.sal-remarks')?.value || '',
+    
     });
 
   });
@@ -2126,7 +2127,7 @@ const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
 
   const header = ['S.No','User ID','Name','Amt/Shift','Total Shift','Total Amt','Monthly Advance','Mess','U/F','P/F','Debit','JVC','Other','Payment Mode','Paid Salary','Remarks/Sign'];
 
-  const csvRows = rows.map(r => [
+ const csvRows = orderedRows.map(r => [
     r.sno, r.id, `"${r.name.replace(/"/g,'""')}"`, r.amtPerShift, r.totalShift, r.totalAmt, r.monthlyAdvance, r.mess, r.uf, r.pf, r.debit, r.jvc, r.other, r.paymentMode, r.paidSalary, `"${r.remarks.replace(/"/g,'""')}"`
   ].join(','));
 
@@ -3505,7 +3506,6 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
