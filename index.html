@@ -10,7 +10,7 @@
 
 <style>
  :root{
-  --sticky-id:100px;
+  --sticky-id:0px;
   --sticky-check:60px;
   --sticky-name:260px;
 }
@@ -3472,7 +3472,7 @@ console.log(text);
 
       const parts = line.trim().split(/\s+/);
 
-      if(parts.length >= 4){
+      if(parts.length >= 3){
 
         const id = parts[0];
         const pf = parts[1];
@@ -3506,7 +3506,6 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
