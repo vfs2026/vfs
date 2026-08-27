@@ -462,7 +462,7 @@ table thead th.sticky-check{
           <tr>
             <th>OUR ACCOUNT NO</th>
             <th>DATE</th>
-            <th>Salary Amt</th>
+            <th>SALARY AMT</th>
             <th>IFSC</th>
             <th>ACCOUNT NO</th>
             <th>HOLDER NAME</th>
@@ -897,7 +897,10 @@ async function saveLabourToFirestore(lab) {
       rate: Number(lab.rate) || 0,
       paymentMode: lab.paymentMode || 'Cash',
       accountNo: lab.accountNo || '',
+      holderName: lab.holderName || '',
+      mobileNo: lab.mobileNo || '',
       ifsc: lab.ifsc || '',
+      bankName: lab.bankName || '',
       branch: lab.branch || '',
 
       status: 'active',
@@ -925,7 +928,10 @@ async function saveLabourToFirestore(lab) {
     paymentMode: lab.paymentMode || 'Cash',
 
     accountNo: lab.accountNo || '',
+    holderName: lab.holderName || '',
+    mobileNo: lab.mobileNo || '',
     ifsc: lab.ifsc || '',
+    bankName: lab.bankName || '',
     branch: lab.branch || '',
 
     status: 'active',
@@ -2855,7 +2861,10 @@ $('saveLabourBtn').onclick = async ()=>{
   const rate = Number($('modalRate').value) || 0;
   const paymentMode = $('modalPayMode').value;
 const accountNo = $('modalAccountNo').value.trim();
+const holderName = $('modalHolderName').value.trim();
+const mobileNo = $('modalMobileNo').value.trim();
 const ifsc = $('modalIFSC').value.trim().toUpperCase();
+const bankName = $('modalBankName').value.trim();
 const branch = $('modalBranch').value.trim();
 
   if(!id || !name){
@@ -2876,7 +2885,10 @@ const lab = {
    paymentMode,
 
    accountNo,
+   holderName,
+   mobileNo,
    ifsc,
+   bankName,
    branch,
 
    status: 'active',
@@ -3413,77 +3425,74 @@ document.getElementById('salarySearch').addEventListener('focus', function(){
     setTimeout(() => targetInput.select(), 0); // ✅ AUTO SELECT
   }
 });
-$('exportAccountCSV').onclick = function () {
+const OUR_ACCOUNT_NUMBER = '0662073000000113';
+const ACCOUNT_SUMMARY_HEADERS = [
+    'OUR ACCOUNT NO', 'DATE', 'SALARY AMT', 'IFSC', 'ACCOUNT NO',
+    'HOLDER NAME', 'BANK NAME', 'BRANCH', 'S.NO', 'MOBILE NO'
+];
+let accountSummaryExportRows = [];
 
-    const month = $('accountMonth').value;
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[char]));
+}
 
-    const trs =
-        document.querySelectorAll(
-            '#accountSummaryTable tbody tr'
-        );
+function accountSummaryCsvValue(value) {
+    return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
 
-    const csv = [
-        [
-            'S.No',
-            'Name',
-            'Account No',
-            'IFSC Code',
-            'Type',
-            'Branch',
-            'Salary Amt'
-        ].join(',')
+function bankExportText(value) {
+    // The bank file must not contain comma or full-stop punctuation.
+    return String(value ?? '').replace(/[,.]/g, '').trim();
+}
+
+function buildBankExportRow(row) {
+    return [
+        String(row[0] ?? '').replace(/\D/g, ''), // Our account number: keep every digit as text.
+        '',
+        String(Math.round(Number(row[2]) || 0)),
+        bankExportText(row[3]).replace(/[^A-Za-z0-9]/g, ''),
+        String(row[4] ?? '').replace(/\D/g, ''), // Beneficiary account number: digits only.
+        bankExportText(row[5]),
+        bankExportText(row[6]),
+        bankExportText(row[7]),
+        String(row[8] ?? '').replace(/\D/g, ''),
+        String(row[9] ?? '').replace(/\D/g, '')
     ];
+}
 
-    trs.forEach(tr => {
+function isExcludedInOpenSalarySheet(labourId, month) {
+    // Respect an Exclude box immediately, even before the owner presses Save Salary Sheet.
+    const salaryMonth = $('salaryMonth')?.value || $('ownerMonth')?.value;
+    if (salaryMonth !== month) return false;
 
-        const td = tr.querySelectorAll('td');
-
-        if (td.length !== 7) return;
-
-        const salary =
-            td[6].innerText
-                .replace('₹','')
-                .trim();
-
-        csv.push([
-            td[0].innerText,
-            `"${td[1].innerText}"`,
-            `"${td[2].innerText}"`,
-            `"${td[3].innerText}"`,
-            `"${td[4].innerText}"`,
-            `"${td[5].innerText}"`,
-            salary
-        ].join(','));
-
+    return Array.from(document.querySelectorAll('#salaryTable tbody tr')).some(tr => {
+        const inputId = tr.querySelector('.sal-amt')?.dataset.id;
+        const displayedId = (tr.querySelector('.sticky-name')?.textContent || '')
+            .split(' - ')[0]
+            .trim();
+        return (inputId || displayedId) === labourId &&
+            tr.querySelector('.sal-exclude')?.checked === true;
     });
+}
 
-    downloadBlob(
-        csv.join('\n'),
-        `account_summary_${month}.csv`,
-        'text/csv'
+$('exportAccountCSV').onclick = function () {
+    const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value;
+    const csv = [ACCOUNT_SUMMARY_HEADERS.join(',')].concat(
+        accountSummaryExportRows.map(row => buildBankExportRow(row).map(accountSummaryCsvValue).join(','))
     );
-
+    downloadBlob(csv.join('\n'), `account_summary_${month || 'export'}.csv`, 'text/csv');
 };
+
 $('exportAccountXLS').onclick = function () {
-
-    const month = $('accountMonth').value;
-
-    const table =
-        document.getElementById('accountSummaryTable');
-
-    if (!table) return;
-
-    const html =
-        '<html><head><meta charset="utf-8"></head><body>' +
-        table.outerHTML +
-        '</body></html>';
-
-    downloadBlob(
-        '\uFEFF' + html,
-        `account_summary_${month}.xls`,
-        'application/vnd.ms-excel'
-    );
-
+    const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value;
+    const headerHtml = ACCOUNT_SUMMARY_HEADERS.map(header => `<th>${escapeHtml(header)}</th>`).join('');
+    const rowsHtml = accountSummaryExportRows.map(row =>
+        `<tr>${buildBankExportRow(row).map(value => `<td style="mso-number-format:'\\@';">${escapeHtml(value)}</td>`).join('')}</tr>`
+    ).join('');
+    const html = `<html><head><meta charset="utf-8"><style>table{border-collapse:collapse}th,td{border:1px solid #000;padding:5px;white-space:nowrap}th{font-weight:bold;text-align:center}</style></head><body><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+    downloadBlob('\uFEFF' + html, `account_summary_${month || 'export'}.xls`, 'application/vnd.ms-excel');
 };
 $('showAccountSummary').onclick = renderAccountSummary;
 
@@ -3503,7 +3512,7 @@ async function renderAccountSummary() {
 
     tbody.innerHTML =
         `<tr>
-            <td colspan="7">Loading...</td>
+            <td colspan="10">Loading...</td>
          </tr>`;
 
     const labs = await fetchAllLabours();
@@ -3530,7 +3539,9 @@ async function renderAccountSummary() {
     // Include only account-payment workers whose salary has been saved for this month,
     // and omit records marked Exclude in the Salary Sheet.
     const includedData = data.filter(item =>
-        item.salary && item.salary.excludeFromExport !== true
+        item.salary &&
+        item.salary.excludeFromExport !== true &&
+        !isExcludedInOpenSalarySheet(item.lab.id, month)
     ).map(item => ({
         ...item,
         // South Indian Bank IFSC codes use SIBL; SIBN is also accepted for existing entries.
@@ -3545,6 +3556,7 @@ async function renderAccountSummary() {
     });
 
     tbody.innerHTML = '';
+    accountSummaryExportRows = [];
 
     let sno = 1;
     let totalSalary = 0;
@@ -3553,47 +3565,35 @@ async function renderAccountSummary() {
 
         const lab = item.lab;
         const salary = item.salary || {};
-        const accountType = item.accountType;
-
         // Salary amount directly from saved salary sheet
         const salaryAmt =
             Number(salary.paid || 0);
 
         totalSalary += salaryAmt;
+        const rowNumber = sno++;
+        const holderName = lab.holderName || '';
+        const row = [
+            OUR_ACCOUNT_NUMBER, '', salaryAmt.toFixed(2), lab.ifsc || '',
+            lab.accountNo || '', holderName, lab.bankName || '', lab.branch || '',
+            rowNumber, lab.mobileNo || ''
+        ];
+        accountSummaryExportRows.push(row);
 
         const tr = document.createElement('tr');
-
-        tr.innerHTML = `
-            <td>${sno++}</td>
-
-            <td style="text-align:left">
-                ${lab.name || ''}
-            </td>
-
-            <td>
-                ${lab.accountNo || ''}
-            </td>
-
-            <td>
-                ${lab.ifsc || ''}
-            </td>
-
-            <td>
-                ${accountType}
-            </td>
-
-            <td style="text-align:left">
-                ${lab.branch || ''}
-            </td>
-
-            <td style="
-                text-align:right;
-                font-weight:bold;
-            ">
-                ₹ ${salaryAmt.toFixed(2)}
-            </td>
-        `;
-
+        row.forEach((value, index) => {
+            const td = document.createElement('td');
+            if (index === 5) {
+                // Keep master/attendance name visible on-screen, but not in the bank export.
+                td.innerHTML = `<div>${escapeHtml(holderName)}</div><div class="small muted">Labour: ${escapeHtml(lab.name || '')}</div>`;
+            } else {
+                td.textContent = value;
+            }
+            if (index === 2) {
+                td.style.textAlign = 'right';
+                td.style.fontWeight = 'bold';
+            }
+            tr.appendChild(td);
+        });
         tbody.appendChild(tr);
 
     });
@@ -3602,7 +3602,7 @@ async function renderAccountSummary() {
 
         tbody.innerHTML = `
             <tr>
-                <td colspan="7">
+                <td colspan="10">
                     No account-payment salary records found
                 </td>
             </tr>
