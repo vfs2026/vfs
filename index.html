@@ -97,6 +97,12 @@ table thead th.sticky-check{
     min-width:260px;
     width:260px;
   }
+  #ownerTable .pf-number-column,
+  #salaryTable .pf-number-column {
+    min-width: 120px;
+    width: 120px;
+    white-space: nowrap;
+  }
   
   /* --- END STICKY HEADER AND COLUMN STYLES --- */
 
@@ -241,14 +247,14 @@ table thead th.sticky-check{
   </div>
 
   <div class="card hidden" id="labourLoginCard">
-    <h3><img src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' class="logo-large" alt="logo"> Labour Login (ID only)</h3>
-    <label>User ID</label><br>
-    <input id="labUserId" placeholder="L001" autocomplete="off">
+    <h3><img src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect rx="12" ry="12" width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="56%" font-size="36" font-family="Arial" font-weight="700" text-anchor="middle" fill="%23a2242a">VF</text></svg>' class="logo-large" alt="logo"> Labour Login</h3>
+    <label>User ID or PF Number</label><br>
+    <input id="labUserId" placeholder="User ID or PF Number" autocomplete="off">
     <div style="margin-top:10px">
       <button class="btn" id="labourLoginBtn">Login</button>
       <button id="labourBack">Back</button>
     </div>
-    <p class="small muted">Labour login requires only User ID — no password shown to labour.</p>
+    <p class="small muted">Labour can log in with User ID or PF Number — no password shown to labour.</p>
   </div>
 
   <div class="card hidden" id="ownerDashboard">
@@ -271,7 +277,7 @@ table thead th.sticky-check{
           <button class="btn" id="loadTable">Load Table</button>
           <div style="flex:1"></div>
           <label>Search</label>
-          <input id="ownerSearch" class="search" placeholder="ID or name" oninput="ownerFilter()">
+          <input id="ownerSearch" class="search" placeholder="ID, name or PF No" oninput="ownerFilter()">
           <button class="success" id="saveAll">Save Shifts</button>
           <button id="exportShiftCSV">Export CSV</button>
           <button id="exportShiftXLS">Export XLS</button>
@@ -382,7 +388,7 @@ table thead th.sticky-check{
   <label style="margin-left:12px">Search</label>
   <input id="salarySearch"
          class="search"
-         placeholder="ID or name"
+         placeholder="ID, name or PF No"
          oninput="salaryFilter()">
 <label style="margin-left:12px">
   <input type="checkbox" id="useSalaryJump">
@@ -421,7 +427,7 @@ table thead th.sticky-check{
 
           <div class="table-wrap" style="margin-top:10px">
             <table id="salaryTable"><thead><tr>
-              <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th>
+              <th class="sticky-id">S.No</th><th class="sticky-name">User ID - Name</th><th class="pf-number-column">PF No</th>
               <th>Amt/Shift</th><th>Total Shift</th><th>Total Amt</th>
               <th>Monthly Advance</th><th>Mess</th><th>U/F</th>
 <th>PF1</th>
@@ -444,7 +450,7 @@ table thead th.sticky-check{
 ================================ -->
 <div id="accountTabContent" class="tab-content card hidden">
   <div class="card" id="accountCard" style="margin-top:0">
-    <h3>Account Summary</h3>
+    <h3>Other Bank Account Summary</h3>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
       <label>Month</label>
       <input type="month" id="accountMonth">
@@ -454,26 +460,41 @@ table thead th.sticky-check{
       <button id="exportAccountXLS">Export Excel</button>
     </div>
     <div id="accountTotalBox" style="margin-bottom:10px;padding:10px;border:2px solid #28a745;border-radius:8px;background:#eaffea;font-weight:bold;font-size:16px">
-      TOTAL A/C SALARY : ₹ 0.00
+      OTHER BANK TOTAL : ₹ 0.00 &nbsp; | &nbsp; WITHIN BANK TOTAL : ₹ 0.00
     </div>
     <div class="table-wrap">
       <table id="accountSummaryTable">
         <thead>
           <tr>
-            <th>OUR ACCOUNT NO</th>
+            <th>COMPANY ACCOUNT NO</th>
             <th>DATE</th>
-            <th>SALARY AMT</th>
-            <th>IFSC</th>
-            <th>ACCOUNT NO</th>
-            <th>HOLDER NAME</th>
+            <th>SALARY</th>
+            <th>IFSC CODE</th>
+            <th>PARTY ACCOUNT NO</th>
+            <th>NAME</th>
             <th>BANK NAME</th>
-            <th>BRANCH</th>
+            <th>BRANCH NAME</th>
             <th>S.NO</th>
             <th>MOBILE NO</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <h3 style="margin:0">Within Bank Account Summary</h3>
+        <div style="flex:1"></div>
+        <button id="exportWithinBankXLS">Export Within Bank Excel</button>
+      </div>
+      <div class="table-wrap">
+        <table id="withinBankSummaryTable">
+          <thead>
+            <tr><th>ACC NO</th><th>NAME</th><th>S.NO</th><th>AMOUNT</th><th>DESCRIPTION</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -558,6 +579,11 @@ table thead th.sticky-check{
     <label>Name</label><input id="modalName"><br>
     <label>Password</label><input id="modalPwd"><br>
     <label>Rate per shift (₹)</label><input id="modalRate" type="number" min="0" step="0.01"><br>
+    <div style="margin:10px 0;padding:8px;border:1px solid #d6e0ef;border-radius:6px">
+      <strong>PF Details</strong>
+      <div class="small muted">Keep the User ID unchanged. Add these numbers after the labour becomes eligible.</div>
+      <label>PF Number</label><input id="modalPFNo" type="text" placeholder="PF Number"><br>
+    </div>
     <label>Payment Mode</label>
 
 <select id="modalPayMode" style="width:140px">
@@ -574,6 +600,7 @@ table thead th.sticky-check{
     <label>Account Holder Name</label>
     <input id="modalHolderName" type="text" placeholder="Account Holder Name"><br>
 
+<div id="otherBankFields">
     <label>Mobile No</label>
     <input id="modalMobileNo" type="tel" placeholder="Mobile Number" inputmode="numeric"><br>
 
@@ -586,6 +613,7 @@ table thead th.sticky-check{
     <label>Bank Name</label>
     <input id="modalBankName" type="text" placeholder="Bank Name"><br>
     <div id="ifscLookupStatus" class="small muted" style="margin-top:4px"></div>
+</div>
 
 </div>
     <div style="margin-top:10px">
@@ -812,12 +840,23 @@ $('ownerLogout').onclick = async ()=>{ await auth.signOut(); location.reload(); 
 /* ===== Labour login (ID only) ===== */
 let currentLabour = null;
 $('labourLoginBtn').onclick = async ()=>{
-  const id = $('labUserId').value.trim();
-  if(!id){ alert('Enter your User ID'); return; }
+  const loginValue = $('labUserId').value.trim();
+  if(!loginValue){ alert('Enter your User ID or PF Number'); return; }
   try {
-    const labDoc = await db.collection('labours').doc(id).get();
+    let labDoc = await db.collection('labours').doc(loginValue).get();
+    if (!labDoc.exists) {
+      const pfMatches = await db.collection('labours')
+        .where('pfNo', '==', loginValue)
+        .limit(2)
+        .get();
+      if (pfMatches.size === 1) labDoc = pfMatches.docs[0];
+      else if (pfMatches.size > 1) {
+        alert('More than one labour has this PF Number. Please contact the owner.');
+        return;
+      }
+    }
     if(!labDoc.exists){
-      alert('User ID not found in Firestore. Create labour as owner first.');
+      alert('User ID or PF Number not found. Please contact the owner.');
       return;
     }
     currentLabour = labDoc.data();
@@ -895,6 +934,7 @@ async function saveLabourToFirestore(lab) {
       name: lab.name || '',
       password: lab.password || '',
       rate: Number(lab.rate) || 0,
+      pfNo: lab.pfNo || '',
       paymentMode: lab.paymentMode || 'Cash',
       accountNo: lab.accountNo || '',
       holderName: lab.holderName || '',
@@ -925,6 +965,7 @@ async function saveLabourToFirestore(lab) {
     name: lab.name || '',
     password: lab.password || '',
     rate: Number(lab.rate) || 0,
+    pfNo: lab.pfNo || '',
     paymentMode: lab.paymentMode || 'Cash',
 
     accountNo: lab.accountNo || '',
@@ -1109,7 +1150,7 @@ async function generateOwnerTable(scrollToTop = true){
     const d = await db.collection('attendance').doc(key).get();
     attMap[l.id] = d.exists ? d.data() : {shifts:{}, rate: l.rate};
   }));
- let html = '<table id="ownerTable"><thead><tr><th class="sticky-id">S.No</th><th class="sticky-check">✓</th><th class="sticky-name">User ID - Name</th>';
+ let html = '<table id="ownerTable"><thead><tr><th class="sticky-id">S.No</th><th class="sticky-check">✓</th><th class="sticky-name">User ID - Name</th><th class="pf-number-column">PF No</th>';
   days.forEach(d => {
   const isSunday = new Date(`${month}-${String(d).padStart(2,'0')}`).getDay() === 0;
   html += `<th class="${isSunday ? 'sunday-col' : ''}">${d}</th>`;
@@ -1120,7 +1161,7 @@ async function generateOwnerTable(scrollToTop = true){
     const rec = attMap[l.id] || {shifts:{}, rate:l.rate};
     let total = 0;
    html += `
-<tr data-id="${l.id}">
+<tr data-id="${l.id}" data-search="${l.id} ${l.name || ''} ${l.pfNo || ''}">
   <td class="sticky-id">${i+1}</td>
 
   
@@ -1133,6 +1174,7 @@ async function generateOwnerTable(scrollToTop = true){
   <td class="sticky-name">
     ${l.id} - ${l.name}
   </td>
+  <td class="pf-number-column">${l.pfNo || ''}</td>
 `;
     days.forEach(d=>{ const v = rec.shifts && (rec.shifts[d] !== undefined) ? rec.shifts[d] : 0; total += Number(v)||0; const isAbsent = Number(v) === 0;
 const displayVal = isAbsent ? 'A' : v;
@@ -1172,6 +1214,7 @@ html += `
     <td class="sticky-name">
       <strong>ATTENDED COUNT</strong>
     </td>
+    <td></td>
     ${days.map(d => `<td class="att-count" data-day="${d}">0</td>`).join('')}
    <td class="sticky-check"></td>
     <td></td>
@@ -1418,9 +1461,7 @@ function salaryFilter(){
   const q = $('salarySearch').value.trim().toLowerCase();
 
   document.querySelectorAll('#salaryTable tbody tr').forEach(tr => {
-    const text = (
-      tr.querySelector('.sticky-name')?.textContent || ''
-    ).toLowerCase();
+    const text = `${tr.querySelector('.sticky-name')?.textContent || ''} ${tr.dataset.search || ''}`.toLowerCase();
 
     tr.style.display = (!q || text.includes(q)) ? '' : 'none';
   });
@@ -1452,7 +1493,7 @@ async function populateAdvSelect(){
   const advSearch = $('advSearch');
   advSearch.oninput = function() {
     const q = this.value.trim().toLowerCase();
-    const found = labs.find(x => (x.id && x.id.toLowerCase().startsWith(q)) || (x.name && x.name.toLowerCase().includes(q)));
+    const found = labs.find(x => (x.id && x.id.toLowerCase().startsWith(q)) || (x.name && x.name.toLowerCase().includes(q)) || (x.pfNo && x.pfNo.toLowerCase().includes(q)));
     if(found) {
       $('advLab').value = found.id;
       // Also update the edit dates for the new selection
@@ -1922,9 +1963,11 @@ function recalcSalaryTotals() {
 
     const tr = document.createElement('tr');
 tr.dataset.id = l.id;
+tr.dataset.search = `${l.id} ${l.name || ''} ${l.pfNo || ''}`.toLowerCase();
    tr.innerHTML = `
 <td class="sticky-id">${i+1}</td>
 <td class="sticky-name">${l.id} - ${l.name}</td>
+<td class="pf-number-column">${l.pfNo || ''}</td>
 
 <td>
 <input class="sal-amt sal-editable"
@@ -2276,6 +2319,7 @@ async function collectSalaryForMonth(month){
     rows.push({
       id: tr.querySelector('.sal-amt')?.dataset.id || '',
       name: parts[1] || '',
+      pfNo: tr.querySelector('.pf-number-column')?.textContent.trim() || '',
      amtPerShift: tr.querySelector('.sal-amt')?.value || 0,
 totalShift: tr.querySelector('.sal-totalShift')?.value || 0,
 totalAmt: tr.querySelector('.sal-totalAmt')?.value || 0,
@@ -2393,26 +2437,35 @@ const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
   }
 
   let html = `
- <div style="
-  font-family:Arial;
-  padding:0;
-  margin:0;
-"><h2 style="text-align:center;margin:0 0 8px 0;padding:0;">
+ <div style="font-family:Arial,sans-serif;width:277mm;margin:0 auto;padding:0;box-sizing:border-box">
+    <style>
+      .salary-pdf-table th,.salary-pdf-table td{border:1px solid #b8c7d9;padding:3px 2px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;line-height:1.15}
+      .salary-pdf-table th{background:#f1f6fb;font-weight:bold}
+      .salary-pdf-table tr{page-break-inside:avoid}
+    </style>
+    <h2 style="text-align:center;font-size:16px;line-height:1.15;margin:0 0 6px;padding:0;">
       VEERANAR FINISHERS<br>
       MONTHLY SALARY ${formatMonthName(month)}
     </h2>
 
-    <table style="
-      width:100%;
+    <table class="salary-pdf-table" style="
+      width:277mm;
       border-collapse:collapse;
-      font-size:11px;
-
- page-break-inside:auto;
+      table-layout:fixed;
+      font-size:7px;
+      page-break-inside:auto;
     ">
+      <colgroup>
+        <col style="width:8mm"><col style="width:15mm"><col style="width:15mm"><col style="width:68mm">
+        <col style="width:14mm"><col style="width:12mm"><col style="width:16mm"><col style="width:16mm">
+        <col style="width:12mm"><col style="width:10mm"><col style="width:10mm"><col style="width:12mm">
+        <col style="width:12mm"><col style="width:12mm"><col style="width:12mm"><col style="width:17mm"><col style="width:16mm">
+      </colgroup>
       <thead>
         <tr>
           <th>S.No</th>
           <th>ID</th>
+          <th>PF No</th>
           <th>Name</th>
           <th>Amt</th>
           <th>Shift</th>
@@ -2440,7 +2493,7 @@ function renderSection(title, data) {
   let total = 0;
   let sectionHTML = `
 <tr class="section-header">
-  <td colspan="16" style="text-align:left">
+  <td colspan="17" style="text-align:left">
     ${title}
   </td>
 </tr>
@@ -2454,6 +2507,7 @@ function renderSection(title, data) {
 <tr>
   <td>${r.sno}</td>
   <td>${r.id}</td>
+  <td>${r.pfNo}</td>
   <td>${r.name}</td>
   <td>${r.amtPerShift}</td>
   <td>${r.totalShift}</td>
@@ -2474,7 +2528,7 @@ function renderSection(title, data) {
 
   sectionHTML += `
 <tr>
-  <td colspan="14" style="text-align:right;font-weight:bold">
+  <td colspan="15" style="text-align:right;font-weight:bold">
     ${title} TOTAL
   </td>
   <td colspan="2" style="font-weight:bold">
@@ -2499,10 +2553,10 @@ const grandTotal =
 
 html += `
 <tr>
-  <td colspan="14" style="text-align:right;font-size:14px;font-weight:bold">
+  <td colspan="15" style="text-align:right;font-size:12px;font-weight:bold">
     GRAND TOTAL
   </td>
-  <td colspan="2" style="font-size:14px;font-weight:bold">
+  <td colspan="2" style="font-size:12px;font-weight:bold">
     ₹ ${grandTotal.toFixed(2)}
   </td>
 </tr>
@@ -2529,7 +2583,7 @@ html += `
       scrollY: 0
     },
     pagebreak: {
-      mode: ['avoid-all', 'css', 'legacy']
+      mode: ['css', 'legacy']
     },
     jsPDF: {
       unit: 'mm',
@@ -2575,10 +2629,10 @@ async function renderLabourList(){
   originalLabourOrder = labs.map(l => l.id);
 
   // Build table rows as draggable when reorder is enabled.
-  let html = '<table id="labourTable"><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>Rate/shift</th><th>Payment Mode</th><th>Actions</th></tr></thead><tbody>';
+  let html = '<table id="labourTable"><thead><tr><th>S.No</th><th>User ID</th><th>Name</th><th>PF No</th><th>Rate/shift</th><th>Payment Mode</th><th>Actions</th></tr></thead><tbody>';
   labs.forEach((l,i)=>{
     // add draggable-row class only if reorderEnabled is true (we will toggle later)
-    html += `<tr class="lab-row draggable-row" data-id="${l.id}" draggable="false"><td class="lab-sno">${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>₹${Number(l.rate).toFixed(2)}</td><td>${l.paymentMode || 'Cash'}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`;
+    html += `<tr class="lab-row draggable-row" data-id="${l.id}" draggable="false"><td class="lab-sno">${i+1}</td><td>${l.id}</td><td class="left">${l.name}</td><td>${l.pfNo || ''}</td><td>₹${Number(l.rate).toFixed(2)}</td><td>${l.paymentMode || 'Cash'}</td><td><button onclick="openEditLabour('${l.id}')">Edit</button> <button onclick="deleteLabour('${l.id}')">Delete</button></td></tr>`;
   });
   html += '</tbody></table>';
   $('labourList').innerHTML = html;
@@ -2716,6 +2770,8 @@ function toggleBankFields(){
   const paymentMode = $('modalPayMode').value;
   const showBankFields = paymentMode === 'A/c' || paymentMode === 'Within A/c';
   $('bankFields').style.display = showBankFields ? 'block' : 'none';
+  // Within-bank payments only need the beneficiary account number and holder name.
+  $('otherBankFields').style.display = paymentMode === 'Within A/c' ? 'none' : 'block';
 }
 
 function getPreviousMonth(month) {
@@ -2818,6 +2874,7 @@ function openLabourModal(editId){
     fetchLabourById(editId).then(lab=>{
       $('labourModalTitle').textContent = 'Edit Labour';
       $('modalUserId').value = lab.id; $('modalName').value = lab.name; $('modalPwd').value = lab.password; $('modalRate').value = lab.rate;
+      $('modalPFNo').value = lab.pfNo || '';
       $('modalPayMode').value = lab.paymentMode || 'Cash';
       $('modalAccountNo').value = lab.accountNo || '';
 $('modalHolderName').value = lab.holderName || '';
@@ -2832,6 +2889,7 @@ $('modalBankName').value = lab.bankName || '';$('labourModal').dataset.edit = ed
   } else {
     $('labourModalTitle').textContent = 'Add Labour';
     $('modalUserId').value=''; $('modalName').value=''; $('modalPwd').value='1234'; $('modalRate').value='500';
+    $('modalPFNo').value='';
     $('modalPayMode').value = 'Cash';
 $('modalAccountNo').value = '';
 $('modalHolderName').value = '';
@@ -2859,6 +2917,7 @@ $('saveLabourBtn').onclick = async ()=>{
   const name = $('modalName').value.trim();
   const pwd = $('modalPwd').value.trim();
   const rate = Number($('modalRate').value) || 0;
+  const pfNo = $('modalPFNo').value.trim();
   const paymentMode = $('modalPayMode').value;
 const accountNo = $('modalAccountNo').value.trim();
 const holderName = $('modalHolderName').value.trim();
@@ -2882,6 +2941,7 @@ const lab = {
    name,
    password: pwd,
    rate,
+   pfNo,
    paymentMode,
 
    accountNo,
@@ -2958,7 +3018,7 @@ async function deleteLabour(id){
 }
 
 /* ===== Labour UI (view only) ===== */
-function renderLabourInfo(){ if(!currentLabour) return; $('labourInfo').innerHTML = `<p><strong>${currentLabour.name}</strong> (ID: ${currentLabour.id})</p>`; }
+function renderLabourInfo(){ if(!currentLabour) return; $('labourInfo').innerHTML = `<p><strong>${currentLabour.name}</strong> (ID: ${currentLabour.id})${currentLabour.pfNo ? ` &nbsp;|&nbsp; PF No: ${currentLabour.pfNo}` : ''}</p>`; }
 async function renderLabourView(){
   if(!currentLabour) return; const month = $('labourMonth').value; if(!month) return;
   const rec = await fetchAttendance(currentLabour.id, month);
@@ -3301,7 +3361,7 @@ function ownerFilter(){
   const q = document.getElementById('ownerSearch').value.trim().toLowerCase();
 
   document.querySelectorAll('#ownerTable tbody tr').forEach(tr => {
-    const text = tr.innerText.toLowerCase();
+    const text = `${tr.innerText} ${tr.dataset.search || ''}`.toLowerCase();
     tr.style.display = (!q || text.includes(q)) ? '' : 'none';
   });
 }
@@ -3427,10 +3487,12 @@ document.getElementById('salarySearch').addEventListener('focus', function(){
 });
 const OUR_ACCOUNT_NUMBER = '0662073000000113';
 const ACCOUNT_SUMMARY_HEADERS = [
-    'OUR ACCOUNT NO', 'DATE', 'SALARY AMT', 'IFSC', 'ACCOUNT NO',
-    'HOLDER NAME', 'BANK NAME', 'BRANCH', 'S.NO', 'MOBILE NO'
+    'COMPANY ACCOUNT NO', 'DATE', 'SALARY', 'IFSC CODE', 'PARTY ACCOUNT NO',
+    'NAME', 'BANK NAME', 'BRANCH NAME', 'S.NO', 'MOBILE NO'
 ];
+const WITHIN_BANK_HEADERS = ['ACC NO', 'NAME', 'S.NO', 'AMOUNT', 'DESCRIPTION'];
 let accountSummaryExportRows = [];
+let withinBankExportRows = [];
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>'"]/g, char => ({
@@ -3462,6 +3524,26 @@ function buildBankExportRow(row) {
     ];
 }
 
+function buildWithinBankExportRow(row) {
+    return [
+        String(row[0] ?? '').replace(/\D/g, ''),
+        bankExportText(row[1]),
+        String(row[2] ?? '').replace(/\D/g, ''),
+        String(Math.round(Number(row[3]) || 0)),
+        bankExportText(row[4])
+    ];
+}
+
+function exportTotalRow(rows, columnCount, amountIndex) {
+    const totalRow = Array(columnCount).fill('');
+    totalRow[amountIndex - 1] = 'TOTAL';
+    totalRow[amountIndex] = String(rows.reduce(
+        (sum, row) => sum + (Number(row[amountIndex]) || 0),
+        0
+    ));
+    return totalRow;
+}
+
 function isExcludedInOpenSalarySheet(labourId, month) {
     // Respect an Exclude box immediately, even before the owner presses Save Salary Sheet.
     const salaryMonth = $('salaryMonth')?.value || $('ownerMonth')?.value;
@@ -3479,8 +3561,10 @@ function isExcludedInOpenSalarySheet(labourId, month) {
 
 $('exportAccountCSV').onclick = function () {
     const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value;
+    const exportRows = accountSummaryExportRows.map(buildBankExportRow);
+    exportRows.push(exportTotalRow(exportRows, ACCOUNT_SUMMARY_HEADERS.length, 2));
     const csv = [ACCOUNT_SUMMARY_HEADERS.join(',')].concat(
-        accountSummaryExportRows.map(row => buildBankExportRow(row).map(accountSummaryCsvValue).join(','))
+        exportRows.map(row => row.map(accountSummaryCsvValue).join(','))
     );
     downloadBlob(csv.join('\n'), `account_summary_${month || 'export'}.csv`, 'text/csv');
 };
@@ -3488,11 +3572,31 @@ $('exportAccountCSV').onclick = function () {
 $('exportAccountXLS').onclick = function () {
     const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value;
     const headerHtml = ACCOUNT_SUMMARY_HEADERS.map(header => `<th>${escapeHtml(header)}</th>`).join('');
-    const rowsHtml = accountSummaryExportRows.map(row =>
-        `<tr>${buildBankExportRow(row).map(value => `<td style="mso-number-format:'\\@';">${escapeHtml(value)}</td>`).join('')}</tr>`
+    const exportRows = accountSummaryExportRows.map(buildBankExportRow);
+    exportRows.push(exportTotalRow(exportRows, ACCOUNT_SUMMARY_HEADERS.length, 2));
+    const rowsHtml = exportRows.map((row, index) => {
+        const isTotal = index === exportRows.length - 1;
+        const cellStyle = `mso-number-format:'\\@';${isTotal ? 'background:#fff2cc;font-weight:bold;' : ''}`;
+        return `<tr>${row.map(value => `<td style="${cellStyle}">${escapeHtml(value)}</td>`).join('')}</tr>`;
+    }
     ).join('');
-    const html = `<html><head><meta charset="utf-8"><style>table{border-collapse:collapse}th,td{border:1px solid #000;padding:5px;white-space:nowrap}th{font-weight:bold;text-align:center}</style></head><body><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+    const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 landscape;margin:8mm}body{margin:0}table{border-collapse:collapse;width:100%;table-layout:auto}th,td{border:1px solid #000;padding:7px 9px;white-space:nowrap;font-size:11pt}th{font-weight:bold;text-align:center}</style></head><body><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
     downloadBlob('\uFEFF' + html, `account_summary_${month || 'export'}.xls`, 'application/vnd.ms-excel');
+};
+
+$('exportWithinBankXLS').onclick = function () {
+    const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value;
+    const headerHtml = WITHIN_BANK_HEADERS.map(header => `<th>${escapeHtml(header)}</th>`).join('');
+    const exportRows = withinBankExportRows.map(buildWithinBankExportRow);
+    exportRows.push(exportTotalRow(exportRows, WITHIN_BANK_HEADERS.length, 3));
+    const rowsHtml = exportRows.map((row, index) => {
+        const isTotal = index === exportRows.length - 1;
+        const cellStyle = `mso-number-format:'\\@';${isTotal ? 'background:#fff2cc;font-weight:bold;' : ''}`;
+        return `<tr>${row.map(value => `<td style="${cellStyle}">${escapeHtml(value)}</td>`).join('')}</tr>`;
+    }
+    ).join('');
+    const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 landscape;margin:8mm;mso-page-orientation:landscape}body{margin:0}table{border-collapse:collapse;width:281mm;table-layout:fixed;mso-fit-to-page:yes}th,td{border:1px solid #000;padding:7px 5px;font-size:11pt;vertical-align:middle}th{font-weight:bold;text-align:center;white-space:normal}td:nth-child(1),td:nth-child(3),td:nth-child(4){white-space:nowrap}</style></head><body><table><colgroup><col style="width:30mm"><col style="width:128mm"><col style="width:14mm"><col style="width:35mm"><col style="width:210pt;mso-width-source:userset;mso-width-alt:10240"></colgroup><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+    downloadBlob('\uFEFF' + html, `within_bank_summary_${month || 'export'}.xls`, 'application/vnd.ms-excel');
 };
 $('showAccountSummary').onclick = renderAccountSummary;
 
@@ -3509,11 +3613,14 @@ async function renderAccountSummary() {
 
     const tbody =
         document.querySelector('#accountSummaryTable tbody');
+    const withinTbody =
+        document.querySelector('#withinBankSummaryTable tbody');
 
     tbody.innerHTML =
         `<tr>
             <td colspan="10">Loading...</td>
          </tr>`;
+    withinTbody.innerHTML = `<tr><td colspan="5">Loading...</td></tr>`;
 
     const labs = await fetchAllLabours();
 
@@ -3545,7 +3652,7 @@ async function renderAccountSummary() {
     ).map(item => ({
         ...item,
         // South Indian Bank IFSC codes use SIBL; SIBN is also accepted for existing entries.
-        accountType: /^(SIBL|SIBN)/.test((item.lab.ifsc || '').trim().toUpperCase())
+        accountType: item.lab.paymentMode === 'Within A/c' || /^(SIBL|SIBN)/.test((item.lab.ifsc || '').trim().toUpperCase())
             ? 'Within Bank'
             : 'Other Bank'
     })).sort((a, b) => {
@@ -3556,10 +3663,14 @@ async function renderAccountSummary() {
     });
 
     tbody.innerHTML = '';
+    withinTbody.innerHTML = '';
     accountSummaryExportRows = [];
+    withinBankExportRows = [];
 
     let sno = 1;
-    let totalSalary = 0;
+    let withinSno = 1;
+    let otherBankTotal = 0;
+    let withinBankTotal = 0;
 
     includedData.forEach(item => {
 
@@ -3569,9 +3680,35 @@ async function renderAccountSummary() {
         const salaryAmt =
             Number(salary.paid || 0);
 
-        totalSalary += salaryAmt;
-        const rowNumber = sno++;
         const holderName = lab.holderName || '';
+
+        if (item.accountType === 'Within Bank') {
+            withinBankTotal += salaryAmt;
+            const withinRow = [
+                lab.accountNo || '', holderName, withinSno++, salaryAmt.toFixed(2), ''
+            ];
+            withinBankExportRows.push(withinRow);
+
+            const withinTr = document.createElement('tr');
+            withinRow.forEach((value, index) => {
+                const td = document.createElement('td');
+                if (index === 1) {
+                    td.innerHTML = `<div>${escapeHtml(holderName)}</div><div class="small muted">Labour: ${escapeHtml(lab.name || '')}</div>`;
+                } else {
+                    td.textContent = value;
+                }
+                if (index === 3) {
+                    td.style.textAlign = 'right';
+                    td.style.fontWeight = 'bold';
+                }
+                withinTr.appendChild(td);
+            });
+            withinTbody.appendChild(withinTr);
+            return;
+        }
+
+        otherBankTotal += salaryAmt;
+        const rowNumber = sno++;
         const row = [
             OUR_ACCOUNT_NUMBER, '', salaryAmt.toFixed(2), lab.ifsc || '',
             lab.accountNo || '', holderName, lab.bankName || '', lab.branch || '',
@@ -3611,7 +3748,7 @@ async function renderAccountSummary() {
     }
 
     $('accountTotalBox').innerHTML =
-        `TOTAL A/C SALARY : ₹ ${totalSalary.toFixed(2)}`;
+        `OTHER BANK TOTAL : ₹ ${otherBankTotal.toFixed(2)} &nbsp; | &nbsp; WITHIN BANK TOTAL : ₹ ${withinBankTotal.toFixed(2)}`;
 }
 
 function getMonthsInDateRange(fromDate, toDate) {
@@ -3627,6 +3764,10 @@ function getMonthsInDateRange(fromDate, toDate) {
     if (month === 13) {
       month = 1;
       year += 1;
+    }
+
+    if (withinSno === 1) {
+        withinTbody.innerHTML = `<tr><td colspan="5">No within-bank salary records found</td></tr>`;
     }
   }
 
@@ -3977,357 +4118,4 @@ function exportShortlistCSV() {
     const tds = r.querySelectorAll('td');
     const inTime = r.querySelector('.in-time')?.value || '';
     const outTime = r.querySelector('.out-time')?.value || '';
-    const present = r.querySelector('.present-time')?.value || '';
-
-    csvRows.push([
-      tds[0].innerText,
-      `"${tds[1].innerText}"`,
-      tds[2].innerText,
-      tds[3].innerText,
-      inTime,
-      outTime,
-      present
-    ].join(','));
-  });
-
-  downloadBlob(csvRows.join('\n'),
-    `shortlist_${$('ownerMonth').value}.csv`,
-    'text/csv'
-  );
-}
-function exportShortlistXLS() {
-  const rows = document.querySelectorAll('#shortlistTable tbody tr');
-  if (!rows.length) {
-    alert('No shortlist data');
-    return;
-  }
-
-  let html = `
-  <table border="1">
-    <tr>
-      <th>ID NO</th><th>NAME</th><th>DATE</th><th>SHIFT</th>
-      <th>IN TIME</th><th>OUT TIME</th><th>PRESENT TIME</th>
-    </tr>`;
-
-  rows.forEach(r => {
-    const tds = r.querySelectorAll('td');
-    html += `
-      <tr>
-        <td>${tds[0].innerText}</td>
-        <td>${tds[1].innerText}</td>
-        <td>${tds[2].innerText}</td>
-        <td>${tds[3].innerText}</td>
-        <td>${r.querySelector('.in-time')?.value || ''}</td>
-        <td>${r.querySelector('.out-time')?.value || ''}</td>
-        <td>${r.querySelector('.present-time')?.value || ''}</td>
-      </tr>`;
-  });
-
-  html += '</table>';
-
-  downloadBlob(
-    '\uFEFF' + html,
-    `shortlist_${$('ownerMonth').value}.xls`,
-    'application/vnd.ms-excel'
-  );
-}
-
-
-async function saveShortlistToFirestore() {
-  console.log('🟡 saveShortlistToFirestore() started');
-
-  if (!isOwnerSignedIn()) {
-    alert('Owner login required');
-    console.error('❌ Not owner');
-    return;
-  }
-
-  const rows = document.querySelectorAll('#shortlistTable tbody tr');
-  console.log('Rows found:', rows.length);
-
-  if (!rows.length) {
-    alert('No shortlist rows to save');
-    return;
-  }
-
-  const batch = db.batch();
-  const month = $('ownerMonth').value;
-
-  rows.forEach((row, i) => {
-    const tds = row.querySelectorAll('td');
-
-    const labourId = tds[0]?.textContent.trim();
-    const name     = tds[1]?.textContent.trim();
-    const date     = tds[2]?.textContent.trim();
-    const shift    = Number(tds[3]?.textContent.trim());
-
-    const inTime   = row.querySelector('.in-time')?.value || '';
-    const outTime  = row.querySelector('.out-time')?.value || '';
-    const present  = row.querySelector('.present-time')?.value || '';
-
-    console.log(`Row ${i}`, { labourId, date, shift, inTime, outTime, present });
-
-    if (!labourId || !date) return;
-
-    const docId = `${labourId}_${date}`;
-    const ref = db.collection('shortlists').doc(docId);
-
-    batch.set(ref, {
-      labourId,
-      name,
-      date,
-      shift,
-      inTime,
-      outTime,
-      presentTime: present,
-      month,
-      savedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-  });
-
-  try {
-    await batch.commit();
-    alert('✅ Shortlist saved to Firestore');
-    console.log('✅ Firestore batch committed');
-  } catch (err) {
-    alert('❌ Save failed');
-    console.error('Firestore error:', err);
-  }
-}
-
-window.addEventListener('load', () => {
-  const btn = document.getElementById('saveShortlist');
-  if (!btn) {
-    console.error('❌ Save Shortlist button not found');
-    return;
-  }
-
-  btn.addEventListener('click', () => {
-    console.log('✅ Save Shortlist clicked');
-    saveShortlistToFirestore();
-  });
-});
-function exportShortlistPDF() {
-  const rows = document.querySelectorAll('#shortlistTable tbody tr');
-  if (!rows.length) {
-    alert('No shortlist data');
-    return;
-  }
-
-  let html = `
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Shortlist</title>
-<style>
-  body { font-family: Arial, Helvetica, sans-serif; margin:20px; }
-  h2 { text-align:center; margin-bottom:12px; }
-  table { width:100%; border-collapse:collapse; font-size:12px; }
-  th, td { border:1px solid #000; padding:6px; text-align:center; }
-<style>
-  table { 
-    page-break-inside:auto;
-  }
-
-  tr {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  thead {
-    display: table-header-group;
-  }
-
-  tfoot {
-    display: table-footer-group;
-  }
-  th { background:#eee; }
-  thead {
-    display: table-header-group;
-  }
-
-  tr {
-    page-break-inside: avoid;
-  }
-
-  .section-header {
-    page-break-before: auto;
-    page-break-after: avoid;
-    page-break-inside: avoid;
-    break-inside: avoid;
-    background: #ddd;
-    font-weight: bold;
-  }
-</style>
-</head>
-<body>
-
-<h2>SHORTLIST – ${$('ownerMonth').value}</h2>
-
-<table>
-<thead>
-<tr>
-  <th>ID NO</th>
-  <th>NAME</th>
-  <th>DATE</th>
-  <th>SHIFT</th>
-  <th>IN TIME</th>
-  <th>OUT TIME</th>
-  <th>PRESENT TIME</th>
-</tr>
-</thead>
-<tbody>
-`;
-
-  rows.forEach(r => {
-    const tds = r.querySelectorAll('td');
-    const inTime = r.querySelector('.in-time')?.value || '';
-    const outTime = r.querySelector('.out-time')?.value || '';
-    const present = r.querySelector('.present-time')?.value || '';
-
-    html += `
-<tr>
-  <td>${tds[0].innerText}</td>
-  <td>${tds[1].innerText}</td>
-  <td>${tds[2].innerText}</td>
-  <td>${tds[3].innerText}</td>
-  <td>${inTime}</td>
-  <td>${outTime}</td>
-  <td>${present}</td>
-</tr>`;
-  });
-
-  html += `
-</tbody>
-</table>
-
-<script>
-  window.onload = function() {
-    window.print();
-  }
-<\/script>
-
-</body>
-</html>
-`;
-
-  const win = window.open('', '_blank');
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-}
-document.getElementById('uploadExcel').addEventListener('change', async function(e){
-
-  const file = e.target.files[0];
-  if(!file) return;
-
-  const name = file.name.toLowerCase();
-
-  // --------------------------
-  // EXCEL IMPORT
-  // --------------------------
-  if(name.endsWith('.xls') || name.endsWith('.xlsx')){
-
-    const reader = new FileReader();
-
-    reader.onload = function(evt){
-
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data,{type:'array'});
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet);
-
-      rows.forEach(r=>{
-
-        const id = String(r.ID || r.IdNo || r.Id).trim();
-        const pf = r.PF || r.PF1;
-        const esi = r.ESI;
-        const net = r["Net Salary"] || r["NET SALARY"];
-
-        document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
-
-          if(tr.dataset.id === id){
-
-            const pfInput = tr.querySelector('.sal-pf1');
-            const esiInput = tr.querySelector('.sal-esi');
-            const jvcInput = tr.querySelector('.sal-jvc');
-
-            if(pfInput && pf!==undefined){
-              pfInput.value = pf;
-              pfInput.dispatchEvent(new Event('input'));
-            }
-
-            if(esiInput && esi!==undefined)
-              esiInput.value = esi;
-
-            if(jvcInput && net!==undefined)
-              jvcInput.value = net;
-
-          }
-
-        });
-
-      });
-
-    };
-
-    reader.readAsArrayBuffer(file);
-  }
-
-  // --------------------------
-  // IMAGE OCR IMPORT
-  // --------------------------
-  else if(file.type.startsWith("image/")){
-
-    const result = await Tesseract.recognize(file,'eng');
-    const text = result.data.text;
-console.log(text);
-    const lines = text.split('\n');
-
-    lines.forEach(line=>{
-
-      const parts = line.trim().split(/\s+/);
-
-      if(parts.length >= 3){
-
-        const id = parts[0];
-        const pf = parts[1];
-        const esi = parts[2];
-        const net = parts[3];
-
-        document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
-
-          if(tr.dataset.id === id){
-
-            const pfInput = tr.querySelector('.sal-pf1');
-            const esiInput = tr.querySelector('.sal-esi');
-            const jvcInput = tr.querySelector('.sal-jvc');
-
-            if(pfInput) pfInput.value = pf;
-            if(esiInput) esiInput.value = esi;
-            if(jvcInput) jvcInput.value = net;
-
-          }
-
-        });
-
-      }
-
-    });
-
-  }
-
-});
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-</body>
-</html>
-
-
-
-
-
-
-
-
+    const present = r.querySelector('.present
