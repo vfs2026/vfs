@@ -4118,4 +4118,357 @@ function exportShortlistCSV() {
     const tds = r.querySelectorAll('td');
     const inTime = r.querySelector('.in-time')?.value || '';
     const outTime = r.querySelector('.out-time')?.value || '';
-    const present = r.querySelector('.present
+    const present = r.querySelector('.present-time')?.value || '';
+
+    csvRows.push([
+      tds[0].innerText,
+      `"${tds[1].innerText}"`,
+      tds[2].innerText,
+      tds[3].innerText,
+      inTime,
+      outTime,
+      present
+    ].join(','));
+  });
+
+  downloadBlob(csvRows.join('\n'),
+    `shortlist_${$('ownerMonth').value}.csv`,
+    'text/csv'
+  );
+}
+function exportShortlistXLS() {
+  const rows = document.querySelectorAll('#shortlistTable tbody tr');
+  if (!rows.length) {
+    alert('No shortlist data');
+    return;
+  }
+
+  let html = `
+  <table border="1">
+    <tr>
+      <th>ID NO</th><th>NAME</th><th>DATE</th><th>SHIFT</th>
+      <th>IN TIME</th><th>OUT TIME</th><th>PRESENT TIME</th>
+    </tr>`;
+
+  rows.forEach(r => {
+    const tds = r.querySelectorAll('td');
+    html += `
+      <tr>
+        <td>${tds[0].innerText}</td>
+        <td>${tds[1].innerText}</td>
+        <td>${tds[2].innerText}</td>
+        <td>${tds[3].innerText}</td>
+        <td>${r.querySelector('.in-time')?.value || ''}</td>
+        <td>${r.querySelector('.out-time')?.value || ''}</td>
+        <td>${r.querySelector('.present-time')?.value || ''}</td>
+      </tr>`;
+  });
+
+  html += '</table>';
+
+  downloadBlob(
+    '\uFEFF' + html,
+    `shortlist_${$('ownerMonth').value}.xls`,
+    'application/vnd.ms-excel'
+  );
+}
+
+
+async function saveShortlistToFirestore() {
+  console.log('🟡 saveShortlistToFirestore() started');
+
+  if (!isOwnerSignedIn()) {
+    alert('Owner login required');
+    console.error('❌ Not owner');
+    return;
+  }
+
+  const rows = document.querySelectorAll('#shortlistTable tbody tr');
+  console.log('Rows found:', rows.length);
+
+  if (!rows.length) {
+    alert('No shortlist rows to save');
+    return;
+  }
+
+  const batch = db.batch();
+  const month = $('ownerMonth').value;
+
+  rows.forEach((row, i) => {
+    const tds = row.querySelectorAll('td');
+
+    const labourId = tds[0]?.textContent.trim();
+    const name     = tds[1]?.textContent.trim();
+    const date     = tds[2]?.textContent.trim();
+    const shift    = Number(tds[3]?.textContent.trim());
+
+    const inTime   = row.querySelector('.in-time')?.value || '';
+    const outTime  = row.querySelector('.out-time')?.value || '';
+    const present  = row.querySelector('.present-time')?.value || '';
+
+    console.log(`Row ${i}`, { labourId, date, shift, inTime, outTime, present });
+
+    if (!labourId || !date) return;
+
+    const docId = `${labourId}_${date}`;
+    const ref = db.collection('shortlists').doc(docId);
+
+    batch.set(ref, {
+      labourId,
+      name,
+      date,
+      shift,
+      inTime,
+      outTime,
+      presentTime: present,
+      month,
+      savedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  });
+
+  try {
+    await batch.commit();
+    alert('✅ Shortlist saved to Firestore');
+    console.log('✅ Firestore batch committed');
+  } catch (err) {
+    alert('❌ Save failed');
+    console.error('Firestore error:', err);
+  }
+}
+
+window.addEventListener('load', () => {
+  const btn = document.getElementById('saveShortlist');
+  if (!btn) {
+    console.error('❌ Save Shortlist button not found');
+    return;
+  }
+
+  btn.addEventListener('click', () => {
+    console.log('✅ Save Shortlist clicked');
+    saveShortlistToFirestore();
+  });
+});
+function exportShortlistPDF() {
+  const rows = document.querySelectorAll('#shortlistTable tbody tr');
+  if (!rows.length) {
+    alert('No shortlist data');
+    return;
+  }
+
+  let html = `
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Shortlist</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin:20px; }
+  h2 { text-align:center; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { border:1px solid #000; padding:6px; text-align:center; }
+<style>
+  table { 
+    page-break-inside:auto;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+  th { background:#eee; }
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  .section-header {
+    page-break-before: auto;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    background: #ddd;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<h2>SHORTLIST – ${$('ownerMonth').value}</h2>
+
+<table>
+<thead>
+<tr>
+  <th>ID NO</th>
+  <th>NAME</th>
+  <th>DATE</th>
+  <th>SHIFT</th>
+  <th>IN TIME</th>
+  <th>OUT TIME</th>
+  <th>PRESENT TIME</th>
+</tr>
+</thead>
+<tbody>
+`;
+
+  rows.forEach(r => {
+    const tds = r.querySelectorAll('td');
+    const inTime = r.querySelector('.in-time')?.value || '';
+    const outTime = r.querySelector('.out-time')?.value || '';
+    const present = r.querySelector('.present-time')?.value || '';
+
+    html += `
+<tr>
+  <td>${tds[0].innerText}</td>
+  <td>${tds[1].innerText}</td>
+  <td>${tds[2].innerText}</td>
+  <td>${tds[3].innerText}</td>
+  <td>${inTime}</td>
+  <td>${outTime}</td>
+  <td>${present}</td>
+</tr>`;
+  });
+
+  html += `
+</tbody>
+</table>
+
+<script>
+  window.onload = function() {
+    window.print();
+  }
+<\/script>
+
+</body>
+</html>
+`;
+
+  const win = window.open('', '_blank');
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+document.getElementById('uploadExcel').addEventListener('change', async function(e){
+
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const name = file.name.toLowerCase();
+
+  // --------------------------
+  // EXCEL IMPORT
+  // --------------------------
+  if(name.endsWith('.xls') || name.endsWith('.xlsx')){
+
+    const reader = new FileReader();
+
+    reader.onload = function(evt){
+
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data,{type:'array'});
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet);
+
+      rows.forEach(r=>{
+
+        const id = String(r.ID || r.IdNo || r.Id).trim();
+        const pf = r.PF || r.PF1;
+        const esi = r.ESI;
+        const net = r["Net Salary"] || r["NET SALARY"];
+
+        document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
+
+          if(tr.dataset.id === id){
+
+            const pfInput = tr.querySelector('.sal-pf1');
+            const esiInput = tr.querySelector('.sal-esi');
+            const jvcInput = tr.querySelector('.sal-jvc');
+
+            if(pfInput && pf!==undefined){
+              pfInput.value = pf;
+              pfInput.dispatchEvent(new Event('input'));
+            }
+
+            if(esiInput && esi!==undefined)
+              esiInput.value = esi;
+
+            if(jvcInput && net!==undefined)
+              jvcInput.value = net;
+
+          }
+
+        });
+
+      });
+
+    };
+
+    reader.readAsArrayBuffer(file);
+  }
+
+  // --------------------------
+  // IMAGE OCR IMPORT
+  // --------------------------
+  else if(file.type.startsWith("image/")){
+
+    const result = await Tesseract.recognize(file,'eng');
+    const text = result.data.text;
+console.log(text);
+    const lines = text.split('\n');
+
+    lines.forEach(line=>{
+
+      const parts = line.trim().split(/\s+/);
+
+      if(parts.length >= 3){
+
+        const id = parts[0];
+        const pf = parts[1];
+        const esi = parts[2];
+        const net = parts[3];
+
+        document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
+
+          if(tr.dataset.id === id){
+
+            const pfInput = tr.querySelector('.sal-pf1');
+            const esiInput = tr.querySelector('.sal-esi');
+            const jvcInput = tr.querySelector('.sal-jvc');
+
+            if(pfInput) pfInput.value = pf;
+            if(esiInput) esiInput.value = esi;
+            if(jvcInput) jvcInput.value = net;
+
+          }
+
+        });
+
+      }
+
+    });
+
+  }
+
+});
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
