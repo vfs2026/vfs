@@ -2421,180 +2421,81 @@ function formatMonthName(monthStr){
 
 async function exportSalaryPDF(){
   const month = $('salaryMonth').value || $('ownerMonth').value;
-
   if(!month){ alert('Select month'); return; }
 
   const rows = await collectSalaryForMonth(month);
-// 🔁 ORDER BY PAYMENT MODE
-const acRows = rows.filter(r => r.paymentMode === 'A/c');
-const withinAcRows = rows.filter(r => r.paymentMode === 'Within A/c');
-const cashRows = rows.filter(r => r.paymentMode === 'Cash');
+  const sections = [
+    { title: 'A/C PAYMENT', rows: rows.filter(r => r.paymentMode === 'A/c') },
+    { title: 'WITHIN A/C PAYMENT', rows: rows.filter(r => r.paymentMode === 'Within A/c') },
+    { title: 'CASH PAYMENT', rows: rows.filter(r => r.paymentMode === 'Cash') }
+  ];
+  if(rows.length === 0){ alert('No salary data'); return; }
 
-const orderedRows = [...acRows, ...withinAcRows, ...cashRows];
-  if(rows.length === 0){
-    alert('No salary data');
-    return;
-  }
+  const columns = [8,15,15,68,14,12,16,16,12,10,10,12,12,12,12,17,16];
+  const colgroup = `<colgroup>${columns.map(width => `<col style="width:${(width / 277 * 100).toFixed(4)}%">`).join('')}</colgroup>`;
+  const header = `<thead><tr>${['S.No','ID','PF No','Name','Amt','Shift','Total','Advance','Mess','U/F','P/F','Debit','JVC','Other','Bonus','Paid','Mode'].map(label => `<th>${label}</th>`).join('')}</tr></thead>`;
+  const renderSalaryRow = r => `<tr>
+    <td>${r.sno}</td><td>${r.id}</td><td>${r.pfNo}</td><td class="name-cell">${r.name}</td>
+    <td>${r.amtPerShift}</td><td>${r.totalShift}</td><td>${r.totalAmt}</td><td>${r.monthlyAdvance}</td>
+    <td>${r.mess}</td><td>${r.uf}</td><td>${r.pf}</td><td>${r.debit}</td><td>${r.jvc}</td>
+    <td>${r.other}</td><td>${r.bonus}</td><td><strong>${r.paidSalary}</strong></td><td>${r.paymentMode}</td>
+  </tr>`;
 
-  let html = `
- <div style="font-family:Arial,sans-serif;width:277mm;margin:0 auto;padding:0;box-sizing:border-box">
-    <style>
-      .salary-pdf-table th,.salary-pdf-table td{border:1px solid #b8c7d9;padding:3px 2px;text-align:center;vertical-align:middle;overflow-wrap:anywhere;line-height:1.15}
-      .salary-pdf-table th{background:#f1f6fb;font-weight:bold}
-      .salary-pdf-table tr{page-break-inside:avoid}
-    </style>
-    <h2 style="text-align:center;font-size:16px;line-height:1.15;margin:0 0 6px;padding:0;">
-      VEERANAR FINISHERS<br>
-      MONTHLY SALARY ${formatMonthName(month)}
-    </h2>
+  const nonEmptySections = sections.filter(section => section.rows.length);
+  const grandTotal = rows.reduce((sum, r) => sum + (Number(r.paidSalary) || 0), 0);
 
-    <table class="salary-pdf-table" style="
-      width:277mm;
-      border-collapse:collapse;
-      table-layout:fixed;
-      font-size:7px;
-      page-break-inside:auto;
-    ">
-      <colgroup>
-        <col style="width:8mm"><col style="width:15mm"><col style="width:15mm"><col style="width:68mm">
-        <col style="width:14mm"><col style="width:12mm"><col style="width:16mm"><col style="width:16mm">
-        <col style="width:12mm"><col style="width:10mm"><col style="width:10mm"><col style="width:12mm">
-        <col style="width:12mm"><col style="width:12mm"><col style="width:12mm"><col style="width:17mm"><col style="width:16mm">
-      </colgroup>
-      <thead>
-        <tr>
-          <th>S.No</th>
-          <th>ID</th>
-          <th>PF No</th>
-          <th>Name</th>
-          <th>Amt</th>
-          <th>Shift</th>
-          <th>Total</th>
-          <th>Advance</th>
-          <th>Mess</th>
-          <th>U/F</th>
-          <th>P/F</th>
-          <th>Debit</th>
-          <th>JVC</th>
-          <th>Other</th>
-          <th>Bonus</th>
-          <th>Paid</th>
-          <th>Mode</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-
-// ===== SECTION FUNCTION =====
-function renderSection(title, data) {
-
-  if (!data.length) return '';
-
-  let total = 0;
-  let sectionHTML = `
-<tr class="section-header">
-  <td colspan="17" style="text-align:left">
-    ${title}
-  </td>
-</tr>
-`;
-
-  data.forEach(r => {
-
-    total += Number(r.paidSalary) || 0;
-
-    sectionHTML += `
-<tr>
-  <td>${r.sno}</td>
-  <td>${r.id}</td>
-  <td>${r.pfNo}</td>
-  <td>${r.name}</td>
-  <td>${r.amtPerShift}</td>
-  <td>${r.totalShift}</td>
-  <td>${r.totalAmt}</td>
-  <td>${r.monthlyAdvance}</td>
-  <td>${r.mess}</td>
-  <td>${r.uf}</td>
-  <td>${r.pf}</td>
-  <td>${r.debit}</td>
-  <td>${r.jvc}</td>
-  <td>${r.other}</td>
-  <td>${r.bonus}</td>
-  <td><strong>${r.paidSalary}</strong></td>
-  <td>${r.paymentMode}</td>
-</tr>
-`;
-  });
-
-  sectionHTML += `
-<tr>
-  <td colspan="15" style="text-align:right;font-weight:bold">
-    ${title} TOTAL
-  </td>
-  <td colspan="2" style="font-weight:bold">
-    ₹ ${total.toFixed(2)}
-  </td>
-</tr>
-`;
-
-  return sectionHTML;
-}
-
-// ===== ADD SECTIONS =====
-html += renderSection('A/C PAYMENT', acRows);
-html += renderSection('WITHIN A/C PAYMENT', withinAcRows);
-html += renderSection('CASH PAYMENT', cashRows);
-
-// ===== GRAND TOTAL =====
-const grandTotal =
-  acRows.reduce((s,r)=>s+Number(r.paidSalary||0),0) +
-  withinAcRows.reduce((s,r)=>s+Number(r.paidSalary||0),0) +
-  cashRows.reduce((s,r)=>s+Number(r.paidSalary||0),0);
-
-html += `
-<tr>
-  <td colspan="15" style="text-align:right;font-size:12px;font-weight:bold">
-    GRAND TOTAL
-  </td>
-  <td colspan="2" style="font-size:12px;font-weight:bold">
-    ₹ ${grandTotal.toFixed(2)}
-  </td>
-</tr>
-`;
-  html += `
-      </tbody>
-    </table>
-  </div>
-  `;
-
+  const sectionMarkup = nonEmptySections.map((section, index) => {
+    const sectionTotal = section.rows.reduce((sum, r) => sum + (Number(r.paidSalary) || 0), 0);
+    const subtotal = `<tr class="subtotal"><td colspan="15">${section.title} TOTAL</td><td colspan="2">₹ ${sectionTotal.toFixed(2)}</td></tr>`;
+    const grand = index === nonEmptySections.length - 1 ? `<tr class="grand-total"><td colspan="15">GRAND TOTAL</td><td colspan="2">₹ ${grandTotal.toFixed(2)}</td></tr>` : '';
+    return `<section class="salary-pdf-section">
+      <header class="statement-heading">
+        <h1>VEERANAR FINISHERS</h1>
+        <div class="statement-title">MONTHLY SALARY STATEMENT</div>
+        <div class="statement-period">${formatMonthName(month)}</div>
+      </header>
+      <table class="salary-pdf-table">${colgroup}<thead>
+        <tr class="section-header"><th colspan="17">${section.title}</th></tr>
+        ${header.slice(7, -8)}
+      </thead><tbody>
+        ${section.rows.map(renderSalaryRow).join('')}${subtotal}${grand}
+      </tbody></table>
+      <footer class="statement-footer">Salary statement · ${formatMonthName(month)}</footer>
+    </section>`;
+  }).join('');
   const element = document.createElement('div');
-  element.innerHTML = html;
+  element.style.cssText = 'display:block;width:287mm;margin:0;padding:0;background:#fff;';
+  element.innerHTML = `<style>
+    .salary-pdf-section{box-sizing:border-box;width:287mm;margin:0;padding:0;background:#fff;color:#17212b;font-family:Arial,Helvetica,sans-serif;page-break-inside:auto;break-inside:auto}
+    .salary-pdf-section + .salary-pdf-section{page-break-before:always;break-before:page}
+    .statement-heading{text-align:center;border-bottom:1px solid #8799aa;margin:0 0 5mm;padding:0 0 3mm;line-height:1.2}
+    .statement-heading h1{display:block;font-size:15px;letter-spacing:.5px;margin:0 0 1mm;padding:0}
+    .statement-title{font-weight:bold;font-size:11px}
+    .statement-period{font-size:9px;margin-top:1mm}
+    .salary-pdf-table{width:100%;max-width:100%;border-collapse:collapse;table-layout:fixed;font-size:8px}
+    .salary-pdf-table th,.salary-pdf-table td{box-sizing:border-box;border:1px solid #9babb9;padding:3px 2px;text-align:center;vertical-align:middle;line-height:1.15;overflow-wrap:anywhere;word-break:normal}
+    .salary-pdf-table thead{display:table-header-group}
+    .salary-pdf-table th{background:#eaf0f5;font-weight:bold;color:#17212b}
+    .salary-pdf-table .name-cell{text-align:left;padding-left:4px}
+    .salary-pdf-table .section-header th{background:#f2f5f7;font-weight:bold;text-align:left;padding:4px}
+    .salary-pdf-table .subtotal td,.salary-pdf-table .grand-total td{text-align:right;font-weight:bold;background:#f7f9fa;padding:4px}
+    .salary-pdf-table .grand-total td{border-top:2px solid #455565;font-size:9px}
+    .statement-footer{border-top:1px solid #c5cdd4;margin-top:3mm;padding-top:1.5mm;text-align:center;font-size:7px;color:#596875}
+  </style>${sectionMarkup}`;
   document.body.appendChild(element);
-
- await html2pdf()
-  .from(element)
-  .set({
-    margin: [10, 10, 10, 10],   // more safe margin
-    filename: `salary_sheet_${month}.pdf`,
-    image: { type: 'jpeg', quality: 1 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      scrollY: 0
-    },
-    pagebreak: {
-      mode: ['css', 'legacy']
-    },
-    jsPDF: {
-      unit: 'mm',
-      format: 'a4',
-      orientation: 'landscape'
-    }
-  })
-  .save();
-  element.remove();
+  try{
+    await html2pdf().from(element).set({
+      margin: [5, 5, 5, 5],
+      filename: `salary_sheet_${month}.pdf`,
+      image: { type: 'jpeg', quality: 1 },
+      html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['.salary-pdf-table tr'] },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    }).save();
+  } finally {
+    element.remove();
+  }
 }
-
 /* ===== labour management (owner-only) ===== */
 
 /* Drag & drop state */
@@ -4464,7 +4365,6 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
