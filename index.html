@@ -284,46 +284,7 @@ table thead th.sticky-check{
           <button id="exportShiftPDF">Export PDF</button>
         </div>
         <div id="ownerTableWrap" class="table-wrap card"></div>
-<!-- ===============================
- SHORTLIST BOX (AUTO FROM ATTENDANCE)
-================================ -->
-<div class="card" id="shortlistCard" style="margin-top:12px">
-  <div style="display:flex;justify-content:space-between;align-items:center">
-<div style="display:flex;justify-content:space-between;align-items:center;">
-  <h3 style="margin:0;">Shortlist (0.5 / 2 Shift)</h3>
-
-  <div style="display:flex;gap:8px;">
-    <button class="btn" id="shortlistBtn">Shortlist</button>
-    <button class="success" id="saveShortlist">Save</button>
-<button id="exportShortlistPDF">PDF</button>
-    <button id="exportShortlistXLS">Excel</button>
-    <button id="exportShortlistCSV">CSV</button>
-
-  </div>
 </div>
-
-  </div>
-
-  <div class="table-wrap" style="margin-top:8px">
-    <table id="shortlistTable">
-     <thead>
-  <tr>
-    <th>ID NO</th>
-    <th>NAME</th>
-    <th>DATE</th>
-    <th>SHIFT</th>
-    <th>IN TIME</th>
-    <th>OUT TIME</th>
-    <th>PRESENT TIME (HRS)</th>
-  </tr>
-</thead>
-
-      <tbody></tbody>
-    </table>
-  </div>
-</div>
-
-    </div>
 
 <label style="margin-left:8px">
   <input type="checkbox" id="useCustomDate">
@@ -628,104 +589,6 @@ table thead th.sticky-check{
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
 <script>
-async function generateShortlist() {
-  const month = $('ownerMonth').value;
-  if (!month) {
-    alert('Select month first');
-    return;
-  }
-
-
-
-  const labours = await fetchAllLabours();
-  const rows = []; // ✅ COLLECT FIRST
-
-  for (const lab of labours) {
-    const att = await fetchAttendance(lab.id, month);
-    if (!att || !att.shifts) continue;
-
-    for (const day in att.shifts) {
-      const shift = Number(att.shifts[day]);
-
-      // ✅ ONLY 0.5 OR 2 SHIFT
-      if (shift === 0.5 || shift === 2) {
-        const date = `${month}-${String(day).padStart(2, '0')}`;
-
-        rows.push({
-          id: lab.id,
-          name: lab.name,
-          date,
-          shift
-        });
-      }
-    }
-  }
-
-  // ✅ SORT BY DATE (ASCENDING)
-  rows.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  // ✅ NOW RENDER
-  rows.forEach(r => {
-const tr = document.createElement('tr');
-
-tr.innerHTML = `
-  <td>${lab.id}</td>
-  <td>${lab.name}</td>
-  <td>${date}</td>
-  <td>${shift}</td>
-  <td><input type="time" class="in-time"></td>
-  <td><input type="time" class="out-time"></td>
-  <td><input class="present-time" readonly></td>
-`;
-
-tbody.appendChild(tr);
-
-  });
-
-  enableShortlistLiveTime(); // keep live calculation
-}
-
-
-
-function enableShortlistLiveTime() {
-  document.querySelectorAll('#shortlistTable tbody tr').forEach(row => {
-    const inTime = row.querySelector('.in-time');
-    const outTime = row.querySelector('.out-time');
-    const present = row.querySelector('.present-time');
-
-    function calc() {
-      if (!inTime.value || !outTime.value) {
-        present.value = '';
-        return;
-      }
-
-      const [ih, im] = inTime.value.split(':').map(Number);
-      const [oh, om] = outTime.value.split(':').map(Number);
-
-      let startMins = ih * 60 + im;
-      let endMins = oh * 60 + om;
-
-      // ✅ HANDLE NIGHT SHIFT (PM → AM)
-      if (endMins < startMins) {
-        endMins += 24 * 60;
-      }
-
-      const diff = endMins - startMins;
-
-      const hrs = Math.floor(diff / 60);
-      const mins = diff % 60;
-
-      // ✅ DISPLAY AS HH:MM
-      present.value =
-        String(hrs).padStart(2, '0') +
-        ':' +
-        String(mins).padStart(2, '0');
-    }
-
-    inTime.addEventListener('change', calc);
-    outTime.addEventListener('change', calc);
-  });
-}
 
 function parseAttendance(ci){
   const val = ci.value.trim().toUpperCase();
@@ -797,24 +660,7 @@ $('ownerBtn').onclick = ()=>{ hideAll(); $('ownerLoginCard').classList.remove('h
 $('labourBtn').onclick = ()=>{ hideAll(); $('labourLoginCard').classList.remove('hidden'); scrollToTop(); };
 $('ownerBack').onclick = ()=>location.reload();
 $('labourBack').onclick = ()=>location.reload();
-$('exportShortlistPDF').onclick = exportShortlistPDF;
-async () => {
-  await saveShortlistToFirestore(); // 🔐 SAVE FIRST
-  exportShortlistPDF();             // ⬇️ DOWNLOAD
-};
 
-$('exportShortlistXLS').onclick = async () => {
-  await saveShortlistToFirestore();
-  exportShortlistXLS();
-};
-
-$('exportShortlistCSV').onclick = async () => {
-  await saveShortlistToFirestore();
-  exportShortlistCSV();
-};
-
-
-/* quick helper for scrolling */
 function scrollToTop(){ window.scrollTo({top:0, behavior:'smooth'}); }
 function scrollToElement(el){ if(!el) return; el.scrollIntoView({behavior:'smooth', block:'center'}); }
 
@@ -922,6 +768,9 @@ function getMonth(){
   return new Date().toISOString().slice(0,7);
 }
 async function saveLabourToFirestore(lab) {
+  const labourId = String(lab.id || '').trim();
+  const pfNo = String(lab.pfNo || '').trim();
+  const identityKeys = [...new Set([labourId, pfNo].filter(Boolean))];
   const ref = db.collection('labours').doc(lab.id);
   const doc = await ref.get();
 
@@ -931,10 +780,13 @@ async function saveLabourToFirestore(lab) {
 
     // Rejoin existing labour without deleting their attendance, salary, or advance history.
     await ref.set({
+      id: labourId,
+      labourId,
       name: lab.name || '',
       password: lab.password || '',
       rate: Number(lab.rate) || 0,
-      pfNo: lab.pfNo || '',
+      pfNo,
+      identityKeys,
       paymentMode: lab.paymentMode || 'Cash',
       accountNo: lab.accountNo || '',
       holderName: lab.holderName || '',
@@ -961,11 +813,13 @@ async function saveLabourToFirestore(lab) {
   } else {
     // Brand new labour
     await ref.set({
-    id: lab.id,
+    id: labourId,
+    labourId,
     name: lab.name || '',
     password: lab.password || '',
     rate: Number(lab.rate) || 0,
-    pfNo: lab.pfNo || '',
+    pfNo,
+    identityKeys,
     paymentMode: lab.paymentMode || 'Cash',
 
     accountNo: lab.accountNo || '',
@@ -1014,6 +868,71 @@ async function fetchAttendance(labId, month){
   const id = `${labId}_${month}`;
   const d = await db.collection('attendance').doc(id).get();
   return d.exists ? d.data() : {shifts:{}, rate: null};
+}
+
+function getLabourIdentityKeys(labour) {
+  return [...new Set([labour.id, labour.labourId, labour.pfNo, ...(Array.isArray(labour.identityKeys) ? labour.identityKeys : [])]
+    .map(value => String(value || '').trim()).filter(Boolean))];
+}
+
+function getLinkedLabourGroups(labours) {
+  const remaining = new Set(labours.map((_, index) => index));
+  const groups = [];
+  while (remaining.size) {
+    const first = remaining.values().next().value;
+    remaining.delete(first);
+    const group = [labours[first]];
+    const keys = new Set(getLabourIdentityKeys(labours[first]));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const index of [...remaining]) {
+        const candidateKeys = getLabourIdentityKeys(labours[index]);
+        if (!candidateKeys.some(key => keys.has(key))) continue;
+        remaining.delete(index);
+        group.push(labours[index]);
+        candidateKeys.forEach(key => keys.add(key));
+        changed = true;
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+function getPrimaryLabourRecord(group) {
+  return group.find(labour => labour.pfNo && String(labour.pfNo).trim() !== labour.id) || group[0];
+}
+
+async function fetchMergedAttendanceForLabour(group, month, attendanceReader = fetchAttendance) {
+  const pfKeys = [...new Set(group.map(labour => String(labour.pfNo || '').trim()).filter(Boolean))];
+  const allKeys = [...new Set(group.flatMap(getLabourIdentityKeys))];
+  // Any linked labour document whose ID equals a PF number is the PF-side attendance record.
+  const pfIdentityKeys = new Set([...pfKeys, ...allKeys.filter(key => pfKeys.includes(key))]);
+  const idKeys = allKeys.filter(key => !pfIdentityKeys.has(key));
+  const pfReadKeys = allKeys.filter(key => pfIdentityKeys.has(key));
+  const [idRecords, pfRecords] = await Promise.all([
+    Promise.all(idKeys.map(key => attendanceReader(key, month))),
+    Promise.all(pfReadKeys.map(key => attendanceReader(key, month)))
+  ]);
+  const normalizeDate = day => /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : `${month}-${String(day).padStart(2, '0')}`;
+  const combined = {};
+  const idDaily = {};
+  const pfDaily = {};
+  const add = (records, daily) => records.forEach(record => Object.entries(record?.shifts || {}).forEach(([day, value]) => {
+    const shift = Number(value);
+    if (!Number.isFinite(shift) || shift <= 0) return;
+    const date = normalizeDate(day);
+    combined[date] = (combined[date] || 0) + shift;
+    daily[date] = (daily[date] || 0) + shift;
+  }));
+  add(idRecords, idDaily);
+  add(pfRecords, pfDaily);
+  const sum = records => records.reduce((total, record) => total + Object.values(record?.shifts || {}).reduce((inner, value) => {
+    const shift = Number(value);
+    return inner + (Number.isFinite(shift) && shift > 0 ? shift : 0);
+  }, 0), 0);
+  return { shifts: combined, idDaily, pfDaily, idShifts: sum(idRecords), pfShifts: sum(pfRecords), totalShifts: sum(idRecords) + sum(pfRecords) };
 }
 async function saveAttendanceForMonth(attObjMap){
   const batch = db.batch();
@@ -1129,7 +1048,7 @@ async function initOwnerView(){
   switchTab('attendance'); 
   // Generate the table now that the month is set
   await generateOwnerTable(); 
-await loadSavedShortlist();
+
 
   if (automaticallyDeactivated.length) {
     alert(
@@ -1244,7 +1163,6 @@ html += `
 $('loadTable').onclick = async () => {
 
   await generateOwnerTable();
-  await renderShortlistFromAttendance();
 };
   updateRowTotals(); 
 updateAttendanceCounts();
@@ -1308,103 +1226,11 @@ el.addEventListener('blur', () => {
   if(scrollToTop) scrollToElement($('ownerTableWrap'));
 }
 $('loadTable').onclick = async () => {
-  await generateOwnerTable();
-  await renderShortlistFromAttendance(); // 🔥 REQUIRED
+  await generateOwnerTable(); // 🔥 REQUIRED
 };
 
 
-// ===============================
-// SHORTLIST FROM ATTENDANCE
-// ===============================
-async function renderShortlistFromAttendance() {
-  const month = $('ownerMonth').value;
-  if (!month) return;
-
-  const tbody = document.querySelector('#shortlistTable tbody');
-  if (!tbody) return;
-
-  tbody.innerHTML = '';
-
-  const labs = await fetchAllLabours();
-
-  for (const lab of labs) {
-    const att = await fetchAttendance(lab.id, month);
-
-    if (!att || !att.shifts) continue;
-
-    for (const day in att.shifts) {
-      const shiftVal = Number(att.shifts[day]);
-
-      if (shiftVal === 0.5 || shiftVal === 2) {
-
-        const fullDate =
-          month + '-' + String(day).padStart(2, '0');
-
-        const tr = document.createElement('tr');
-
-        tr.innerHTML = `
-          <td>${lab.id}</td>
-          <td>${lab.name}</td>
-          <td>${fullDate}</td>
-          <td>${shiftVal}</td>
-          <td><input class="in-time" type="time"></td>
-          <td><input class="out-time" type="time"></td>
-          <td>
-            <input class="present-time"
-                   readonly
-                   style="background:#f5f7fb;width:90px">
-          </td>
-        `;
-
-        tbody.appendChild(tr);
-      }
-    }
-  }
-
-  enableLivePresentCalculation();
-}
-function parse12HourTimeToMinutes(t) {
-  if (!t) return null;
-
-  const m = t.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!m) return null;
-
-  let h = Number(m[1]);
-  const min = Number(m[2]);
-  const ap = m[3].toUpperCase();
-
-  if (ap === 'PM' && h !== 12) h += 12;
-  if (ap === 'AM' && h === 12) h = 0;
-
-  return h * 60 + min;
-}
-function enableLivePresentCalculation() {
-  document.querySelectorAll('#shortlistTable tbody tr').forEach(row => {
-    const inBox  = row.querySelector('.in-time');
-    const outBox = row.querySelector('.out-time');
-    const result = row.querySelector('.present-time');
-
-    function calculateLive() {
-      const inMin  = parse12HourTimeToMinutes(inBox.value);
-      const outMin = parse12HourTimeToMinutes(outBox.value);
-
-      if (inMin === null || outMin === null || outMin <= inMin) {
-        result.value = '';
-        return;
-      }
-
-      const diffMin = outMin - inMin;
-      result.value = (diffMin / 60).toFixed(2); // 🔥 LIVE RESULT
-    }
-
-    // 🔴 LIVE WHILE TYPING
-    inBox.addEventListener('input', calculateLive);
-    outBox.addEventListener('input', calculateLive);
-  });
-}
-
-// ===============================
-// 🔁 SYNC MONTH: Attendance → Salary & Advances
+// Attendance → Salary & Advances
 // ===============================
 $('ownerMonth').addEventListener('change', () => {
 
@@ -2182,7 +2008,6 @@ const calcPaid = totalAmt - deductions + bonus;
   const paidInp = row.querySelector('.sal-paid');
   if(paidInp){
  paidInp.value = Math.round(calcPaid);}
-
   // Automatically exclude workers with fewer than 5 shifts, or with zero/negative
   // salaries, from exports and Account Summary.
   // A positive salary is not auto-unchecked, so an owner's manual exclusion is preserved.
@@ -3653,25 +3478,16 @@ async function renderAccountSummary() {
 }
 
 function getMonthsInDateRange(fromDate, toDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate) || fromDate > toDate) return [];
   const [fromYear, fromMonth] = fromDate.slice(0, 7).split('-').map(Number);
   const [toYear, toMonth] = toDate.slice(0, 7).split('-').map(Number);
   const months = [];
   let year = fromYear;
   let month = fromMonth;
-
   while (year < toYear || (year === toYear && month <= toMonth)) {
     months.push(`${year}-${String(month).padStart(2, '0')}`);
-    month += 1;
-    if (month === 13) {
-      month = 1;
-      year += 1;
-    }
-
-    if (withinSno === 1) {
-        withinTbody.innerHTML = `<tr><td colspan="5">No within-bank salary records found</td></tr>`;
-    }
+    if (++month > 12) { month = 1; year += 1; }
   }
-
   return months;
 }
 
@@ -3690,23 +3506,34 @@ async function renderBonusAttendanceReport() {
     return;
   }
 
-  const labourSnap = await db.collection('labours').get();
-  const matches = labourSnap.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }))
-    .filter(labour =>
-      labour.id.toLowerCase() === searchText ||
-      (labour.name || '').toLowerCase() === searchText ||
-      labour.id.toLowerCase().includes(searchText) ||
-      (labour.name || '').toLowerCase().includes(searchText)
+  const button = $('showBonusAttendance');
+  button.disabled = true;
+  const title = $('bonusReportTitle');
+  try {
+    const labourSnap = await db.collection('labours').get();
+    // Firestore document IDs are the canonical labour IDs; document fields must not override them.
+    const labours = labourSnap.docs.map(doc => ({ ...(doc.data() || {}), id: doc.id }));
+    const normalize = value => String(value ?? '').trim().toLocaleLowerCase();
+    const exactMatches = labours.filter(labour =>
+      getLabourIdentityKeys(labour).some(key => normalize(key) === searchText) || normalize(labour.name) === searchText
     );
+    const matches = exactMatches.length ? exactMatches : labours.filter(labour =>
+      getLabourIdentityKeys(labour).some(key => normalize(key).includes(searchText)) || normalize(labour.name).includes(searchText)
+    );
+    const matchingGroups = getLinkedLabourGroups(labours).filter(group => group.some(labour => matches.includes(labour)));
 
-  if (matches.length !== 1) {
+  if (matchingGroups.length !== 1) {
     $('bonusReportTitle').textContent = '';
-    tbody.innerHTML = `<tr><td colspan="3">${matches.length ? 'More than one labour found. Enter the exact ID or full name.' : 'No labour found.'}</td></tr>`;
+    tbody.replaceChildren();
+    const row = tbody.insertRow();
+    const cell = row.insertCell();
+    cell.colSpan = 3;
+    cell.textContent = matchingGroups.length ? 'More than one labour found. Enter the exact ID, PF number, or full name.' : 'No labour found.';
     return;
   }
 
-  const labour = matches[0];
+  const identityGroup = matchingGroups[0];
+  const labour = getPrimaryLabourRecord(identityGroup);
   const months = getMonthsInDateRange(fromDate, toDate);
   let totalDays = 0;
   let totalShifts = 0;
@@ -3715,13 +3542,12 @@ async function renderBonusAttendanceReport() {
   $('bonusDateDetails').innerHTML = '';
 
   for (const month of months) {
-    const attendance = await fetchAttendance(labour.id, month);
+    const attendance = await fetchMergedAttendanceForLabour(identityGroup, month);
     let presentDays = 0;
     let shifts = 0;
     const dateDetails = [];
 
-    Object.entries(attendance?.shifts || {}).forEach(([day, shiftValue]) => {
-      const attendanceDate = `${month}-${String(day).padStart(2, '0')}`;
+    Object.entries(attendance?.shifts || {}).forEach(([attendanceDate, shiftValue]) => {
       const shift = Number(shiftValue) || 0;
       if (attendanceDate >= fromDate && attendanceDate <= toDate && shift > 0) {
         presentDays += 1;
@@ -3742,12 +3568,27 @@ async function renderBonusAttendanceReport() {
   const totalRow = document.createElement('tr');
   totalRow.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalDays}</strong></td><td><strong>${totalShifts.toFixed(2)}</strong></td>`;
   tbody.appendChild(totalRow);
-  $('bonusReportTitle').textContent = `${labour.id} - ${labour.name || ''} | ${fromDate} to ${toDate} | ${totalShifts < 5 ? 'Not eligible for bonus (fewer than 5 shifts)' : 'Eligible for bonus'}`;
+  const linkedIds = identityGroup.map(item => item.id).filter(id => id !== String(labour.pfNo || '').trim());
+  const linkedPf = [...new Set(identityGroup.map(item => String(item.pfNo || '').trim()).filter(Boolean))];
+  title.textContent = `${linkedIds.join(' / ')} - ${labour.name || ''}${linkedPf.length ? ` | PF: ${linkedPf.join(' / ')}` : ''} | ${fromDate} to ${toDate} | ${totalShifts < 5 ? 'Not eligible for bonus (fewer than 5 shifts)' : 'Eligible for bonus'}`;
+  } catch (error) {
+    console.error('Bonus attendance report failed:', error);
+    title.textContent = `Could not load bonus attendance: ${error.message || error}`;
+    tbody.replaceChildren();
+    const row = tbody.insertRow();
+    const cell = row.insertCell();
+    cell.colSpan = 3;
+    cell.textContent = 'Check your Firestore connection and access, then try again.';
+  } finally {
+    button.disabled = false;
+  }
 }
 
 $('showBonusAttendance').onclick = renderBonusAttendanceReport;
 
 let bonusEligibleRows = [];
+let bonusPdfRows = [];
+let bonusPdfRowsReady = false;
 
 async function renderCurrentMonthBonusLabours() {
   const currentMonth = getMonth();
@@ -3756,26 +3597,37 @@ async function renderCurrentMonthBonusLabours() {
   const fromDate = $('bonusFromDate').value || defaultFromDate;
   const toDate = $('bonusToDate').value || today;
   const output = $('bonusCurrentLabours');
+  const attendanceCache = new Map();
+  const getCachedAttendance = (labourId, month) => {
+    const key = `${labourId}_${month}`;
+    if (!attendanceCache.has(key)) attendanceCache.set(key, fetchAttendance(labourId, month));
+    return attendanceCache.get(key);
+  };
 
   if (fromDate > toDate) {
     alert('From Date must be before To Date.');
     return;
   }
 
+  bonusEligibleRows = [];
+  bonusPdfRows = [];
+  bonusPdfRowsReady = false;
+  output.innerHTML = '<p class="small muted">Loading attendance details…</p>';
+  output.classList.remove('hidden');
+
   const labourSnap = await db.collection('labours').get();
-  const activeLabours = labourSnap.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }))
+  const allLabours = labourSnap.docs
+    .map(doc => ({ ...(doc.data() || {}), id: doc.id }));
+  const activeLabours = allLabours
     .filter(labour =>
       (!labour.activeFrom || labour.activeFrom <= currentMonth) &&
       !(labour.status === 'inactive' && labour.inactiveFrom && labour.inactiveFrom <= currentMonth)
     )
-    .sort((a, b) => (a.order || 999999) - (b.order || 999999));
+    .sort((a, b) => (a.order ?? 999999) - (b.order ?? 999999));
 
   output.innerHTML = '';
-  bonusEligibleRows = [];
-  output.classList.remove('hidden');
   const title = document.createElement('h4');
-  title.textContent = `Current Month Bonus Eligible Labour — ${currentMonth}`;
+  title.textContent = `Bonus Eligible Labour — ${fromDate} to ${toDate}`;
   output.appendChild(title);
 
   const note = document.createElement('p');
@@ -3784,7 +3636,10 @@ async function renderCurrentMonthBonusLabours() {
   output.appendChild(note);
 
   const months = getMonthsInDateRange(fromDate, toDate);
-  for (const labour of activeLabours) {
+  for (const identityGroup of getLinkedLabourGroups(activeLabours)) {
+    const labour = getPrimaryLabourRecord(identityGroup);
+    const pfNo = String(labour.pfNo || identityGroup.find(item => item.pfNo)?.pfNo || '').trim();
+    const idNumbers = [...new Set(identityGroup.map(item => item.id).filter(id => id !== pfNo))];
     const labourDetails = document.createElement('details');
     labourDetails.style.marginBottom = '8px';
     labourDetails.style.padding = '8px';
@@ -3794,15 +3649,17 @@ async function renderCurrentMonthBonusLabours() {
     const labourSummary = document.createElement('summary');
     labourSummary.style.cursor = 'pointer';
     labourSummary.style.fontWeight = 'bold';
-    labourSummary.textContent = `${labour.id} - ${labour.name || ''} | Total Shift: 0.00`;
+    labourSummary.textContent = `${idNumbers.join(' / ')} - ${labour.name || ''}${pfNo ? ` | PF: ${pfNo}` : ''} | Total Shift: 0.00`;
     labourDetails.appendChild(labourSummary);
 
     let labourTotalShifts = 0;
+    let combinedTotalShifts = 0;
+    const combinedMonthly = [];
     for (const month of months) {
-      const attendance = await fetchAttendance(labour.id, month);
+      const attendance = await fetchMergedAttendanceForLabour(identityGroup, month, getCachedAttendance);
       const dates = Object.entries(attendance?.shifts || {})
-        .map(([day, shiftValue]) => ({
-          date: `${month}-${String(day).padStart(2, '0')}`,
+        .map(([date, shiftValue]) => ({
+          date,
           shift: Number(shiftValue) || 0
         }))
         .filter(item => item.date >= fromDate && item.date <= toDate && item.shift > 0)
@@ -3814,6 +3671,12 @@ async function renderCurrentMonthBonusLabours() {
       monthSummary.style.cursor = 'pointer';
       const monthShifts = dates.reduce((sum, item) => sum + item.shift, 0);
       labourTotalShifts += monthShifts;
+      const idMonthShifts = Object.entries(attendance.idDaily || {}).reduce((sum, [date, shift]) =>
+        date >= fromDate && date <= toDate ? sum + shift : sum, 0);
+      const pfMonthShifts = Object.entries(attendance.pfDaily || {}).reduce((sum, [date, shift]) =>
+        date >= fromDate && date <= toDate ? sum + shift : sum, 0);
+      combinedTotalShifts += idMonthShifts + pfMonthShifts;
+      combinedMonthly.push({ month, idShifts: idMonthShifts, pfShifts: pfMonthShifts, total: idMonthShifts + pfMonthShifts });
       monthSummary.textContent = `${month} — ${dates.length} present days, ${monthShifts.toFixed(2)} shifts`;
       monthDetails.appendChild(monthSummary);
 
@@ -3838,15 +3701,16 @@ async function renderCurrentMonthBonusLabours() {
       labourDetails.appendChild(monthDetails);
     }
 
-    labourSummary.textContent = `${labour.id} - ${labour.name || ''} | Total Shift: ${labourTotalShifts.toFixed(2)}`;
+    labourSummary.textContent = `${idNumbers.join(' / ')} - ${labour.name || ''}${pfNo ? ` | PF: ${pfNo}` : ''} | Total Shift: ${combinedTotalShifts.toFixed(2)}`;
 
-    if (labourTotalShifts < 5) continue;
+    if (combinedTotalShifts >= 5) {
+      const monthlyIdShifts = combinedMonthly.reduce((sum, item) => sum + item.idShifts, 0);
+      const monthlyPfShifts = combinedMonthly.reduce((sum, item) => sum + item.pfShifts, 0);
+      bonusPdfRows.push({ id: labour.id, idNumbers, name: labour.name || '', pfNo, monthly: combinedMonthly, totalShifts: combinedTotalShifts });
+      bonusEligibleRows.push({ id: labour.id, name: labour.name || '', pfNo, totalShifts: combinedTotalShifts, idShifts: monthlyIdShifts, pfShifts: monthlyPfShifts });
+    }
 
-    bonusEligibleRows.push({
-      id: labour.id,
-      name: labour.name || '',
-      totalShifts: labourTotalShifts
-    });
+    if (combinedTotalShifts < 5) continue;
 
     output.appendChild(labourDetails);
   }
@@ -3857,9 +3721,22 @@ async function renderCurrentMonthBonusLabours() {
     empty.textContent = 'No active labour has at least 5 shifts in the selected date range.';
     output.appendChild(empty);
   }
+  bonusPdfRowsReady = true;
 }
 
-$('showCurrentMonthLabours').onclick = renderCurrentMonthBonusLabours;
+$('showCurrentMonthLabours').onclick = async () => {
+  const button = $('showCurrentMonthLabours');
+  button.disabled = true;
+  try {
+    await renderCurrentMonthBonusLabours();
+  } catch (error) {
+    console.error('Bonus eligible labour report failed:', error);
+    $('bonusCurrentLabours').classList.remove('hidden');
+    $('bonusCurrentLabours').textContent = `Could not load bonus details: ${error.message || error}`;
+  } finally {
+    button.disabled = false;
+  }
+};
 
 function requireBonusEligibleRows() {
   if (bonusEligibleRows.length) return true;
@@ -3893,30 +3770,74 @@ $('exportBonusXLS').onclick = () => {
   downloadBlob(`\uFEFF<html><head><meta charset="utf-8"></head><body>${table.outerHTML}</body></html>`, 'bonus_eligible_labours.xls', 'application/vnd.ms-excel');
 };
 
-$('exportBonusPDF').onclick = () => {
-  if (!requireBonusEligibleRows()) return;
+ $('exportBonusPDF').onclick = async () => {
+  if (!bonusPdfRowsReady) {
+    alert('Click Current Month Labour first to prepare the Bonus Report PDF.');
+    return;
+  }
+  if (!bonusPdfRows.length) {
+    alert('No labour has at least 5 combined shifts under the labour ID and PF number in this date range.');
+    return;
+  }
   if (typeof html2pdf !== 'function') {
     alert('PDF export library is still loading. Please try again in a moment.');
     return;
   }
+  try {
   const printable = document.createElement('div');
   const title = document.createElement('h3');
   title.textContent = 'Bonus Eligible Labour — Minimum 5 Shifts';
+  const subtitle = document.createElement('p');
+  const fromDate = $('bonusFromDate').value;
+  const toDate = $('bonusToDate').value;
+  subtitle.textContent = fromDate && toDate ? `Attendance period: ${fromDate} to ${toDate}` : '';
   const table = document.createElement('table');
-  table.innerHTML = '<thead><tr><th>Name</th><th>Total Shift</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>S.No</th><th>ID No/PF No</th><th>Name</th><th>Duration</th><th>Shift Split (ID+PF)</th><th>Total Shift</th></tr></thead>';
   const body = document.createElement('tbody');
-  bonusEligibleRows.forEach(row => {
+  const formatShift = value => Number(value.toFixed(2)).toString();
+  const monthLabel = month => new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  bonusPdfRows.forEach((labour, index) => {
+    const months = labour.monthly.filter(item => item.total > 0);
+    const periods = [];
+    months.forEach(item => {
+      const previous = periods[periods.length - 1];
+      const monthIndex = Number(item.month.slice(0, 4)) * 12 + Number(item.month.slice(5, 7));
+      if (!previous || monthIndex - previous.endIndex > 1) {
+        periods.push({ start: item.month, end: item.month, endIndex: monthIndex, shifts: [item.total] });
+      } else {
+        previous.end = item.month;
+        previous.endIndex = monthIndex;
+        previous.shifts.push(item.total);
+      }
+    });
+    const duration = periods.map(period => period.start === period.end
+      ? monthLabel(period.start)
+      : `${monthLabel(period.start)} - ${monthLabel(period.end)}`).join(' | ');
+    const idTotal = months.reduce((sum, item) => sum + item.idShifts, 0);
+    const pfTotal = months.reduce((sum, item) => sum + item.pfShifts, 0);
+    const grandTotal = idTotal + pfTotal;
+    const formula = `${formatShift(idTotal)}+${formatShift(pfTotal)}`;
+    const identityPair = [...new Set([...(labour.idNumbers || [labour.id]), labour.pfNo].filter(Boolean))].join('/');
     const tr = document.createElement('tr');
-    const name = document.createElement('td');
-    const shifts = document.createElement('td');
-    name.textContent = row.name;
-    shifts.textContent = row.totalShifts.toFixed(2);
-    tr.append(name, shifts);
+    [index + 1, identityPair, labour.name || '', duration || '—', formula, formatShift(grandTotal)]
+      .forEach(value => { const td = document.createElement('td'); td.textContent = String(value); tr.appendChild(td); });
     body.appendChild(tr);
   });
+  if (!bonusPdfRows.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 6;
+    td.textContent = 'No eligible labour found in this period.';
+    tr.appendChild(td);
+    body.appendChild(tr);
+  }
   table.appendChild(body);
-  printable.append(title, table);
-  html2pdf().set({ margin: 10, filename: 'bonus_eligible_labours.pdf' }).from(printable).save();
+  printable.append(title, subtitle, table);
+  await html2pdf().set({ margin: 8, filename: 'bonus_eligible_labours.pdf', jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' } }).from(printable).save();
+  } catch (error) {
+    console.error('Bonus PDF export failed:', error);
+    alert(`Could not create the Bonus Report PDF: ${error.message || error}`);
+  }
 };
 
 document.querySelector('#bonusAttendanceTable tbody').addEventListener('click', event => {
@@ -3960,305 +3881,13 @@ document.querySelector('#bonusAttendanceTable tbody').addEventListener('click', 
     });
   } else {
     const detailRow = document.createElement('tr');
-    detailRow.innerHTML = '<td colspan="2">No attendance dates in the selected range.</td>';
+    detailRow.innerHTML = '<td colspan="3">No attendance dates in the selected range.</td>';
     detailBody.appendChild(detailRow);
   }
   table.appendChild(detailBody);
   detailsBox.appendChild(table);
 });
 
-async function loadSavedShortlist() {
-  const month = $('ownerMonth').value;
-  if (!month) return;
-
-  const tbody = document.querySelector('#shortlistTable tbody');
-  tbody.innerHTML = '';
-
-  const snap = await db.collection('shortlists')
-    .where('month', '==', month)
-    .get();
-
-  snap.forEach(doc => {
-    const d = doc.data();
-    const key = `${d.labourId}_${d.date}`;
-
-    const tr = document.createElement('tr');
-    tr.dataset.key = key;
-
-    tr.innerHTML = `
-      <td>${d.labourId}</td>
-      <td>${d.name}</td>
-      <td>${d.date}</td>
-      <td>${d.shift}</td>
-      <td><input type="time" class="in-time" value="${d.inTime || ''}"></td>
-      <td><input type="time" class="out-time" value="${d.outTime || ''}"></td>
-      <td><input class="present-time" readonly value="${d.presentTime || ''}"></td>
-    `;
-
-    tbody.appendChild(tr);
-  });
-
-  enableShortlistLiveTime();
-}
-
-$('shortlistBtn').onclick = generateShortlist;
-function exportShortlistCSV() {
-  const rows = document.querySelectorAll('#shortlistTable tbody tr');
-  if (!rows.length) {
-    alert('No shortlist data');
-    return;
-  }
-
-  const header = [
-    'ID NO','NAME','DATE','SHIFT','IN TIME','OUT TIME','PRESENT TIME'
-  ];
-
-  const csvRows = [header.join(',')];
-
-  rows.forEach(r => {
-    const tds = r.querySelectorAll('td');
-    const inTime = r.querySelector('.in-time')?.value || '';
-    const outTime = r.querySelector('.out-time')?.value || '';
-    const present = r.querySelector('.present-time')?.value || '';
-
-    csvRows.push([
-      tds[0].innerText,
-      `"${tds[1].innerText}"`,
-      tds[2].innerText,
-      tds[3].innerText,
-      inTime,
-      outTime,
-      present
-    ].join(','));
-  });
-
-  downloadBlob(csvRows.join('\n'),
-    `shortlist_${$('ownerMonth').value}.csv`,
-    'text/csv'
-  );
-}
-function exportShortlistXLS() {
-  const rows = document.querySelectorAll('#shortlistTable tbody tr');
-  if (!rows.length) {
-    alert('No shortlist data');
-    return;
-  }
-
-  let html = `
-  <table border="1">
-    <tr>
-      <th>ID NO</th><th>NAME</th><th>DATE</th><th>SHIFT</th>
-      <th>IN TIME</th><th>OUT TIME</th><th>PRESENT TIME</th>
-    </tr>`;
-
-  rows.forEach(r => {
-    const tds = r.querySelectorAll('td');
-    html += `
-      <tr>
-        <td>${tds[0].innerText}</td>
-        <td>${tds[1].innerText}</td>
-        <td>${tds[2].innerText}</td>
-        <td>${tds[3].innerText}</td>
-        <td>${r.querySelector('.in-time')?.value || ''}</td>
-        <td>${r.querySelector('.out-time')?.value || ''}</td>
-        <td>${r.querySelector('.present-time')?.value || ''}</td>
-      </tr>`;
-  });
-
-  html += '</table>';
-
-  downloadBlob(
-    '\uFEFF' + html,
-    `shortlist_${$('ownerMonth').value}.xls`,
-    'application/vnd.ms-excel'
-  );
-}
-
-
-async function saveShortlistToFirestore() {
-  console.log('🟡 saveShortlistToFirestore() started');
-
-  if (!isOwnerSignedIn()) {
-    alert('Owner login required');
-    console.error('❌ Not owner');
-    return;
-  }
-
-  const rows = document.querySelectorAll('#shortlistTable tbody tr');
-  console.log('Rows found:', rows.length);
-
-  if (!rows.length) {
-    alert('No shortlist rows to save');
-    return;
-  }
-
-  const batch = db.batch();
-  const month = $('ownerMonth').value;
-
-  rows.forEach((row, i) => {
-    const tds = row.querySelectorAll('td');
-
-    const labourId = tds[0]?.textContent.trim();
-    const name     = tds[1]?.textContent.trim();
-    const date     = tds[2]?.textContent.trim();
-    const shift    = Number(tds[3]?.textContent.trim());
-
-    const inTime   = row.querySelector('.in-time')?.value || '';
-    const outTime  = row.querySelector('.out-time')?.value || '';
-    const present  = row.querySelector('.present-time')?.value || '';
-
-    console.log(`Row ${i}`, { labourId, date, shift, inTime, outTime, present });
-
-    if (!labourId || !date) return;
-
-    const docId = `${labourId}_${date}`;
-    const ref = db.collection('shortlists').doc(docId);
-
-    batch.set(ref, {
-      labourId,
-      name,
-      date,
-      shift,
-      inTime,
-      outTime,
-      presentTime: present,
-      month,
-      savedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-  });
-
-  try {
-    await batch.commit();
-    alert('✅ Shortlist saved to Firestore');
-    console.log('✅ Firestore batch committed');
-  } catch (err) {
-    alert('❌ Save failed');
-    console.error('Firestore error:', err);
-  }
-}
-
-window.addEventListener('load', () => {
-  const btn = document.getElementById('saveShortlist');
-  if (!btn) {
-    console.error('❌ Save Shortlist button not found');
-    return;
-  }
-
-  btn.addEventListener('click', () => {
-    console.log('✅ Save Shortlist clicked');
-    saveShortlistToFirestore();
-  });
-});
-function exportShortlistPDF() {
-  const rows = document.querySelectorAll('#shortlistTable tbody tr');
-  if (!rows.length) {
-    alert('No shortlist data');
-    return;
-  }
-
-  let html = `
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Shortlist</title>
-<style>
-  body { font-family: Arial, Helvetica, sans-serif; margin:20px; }
-  h2 { text-align:center; margin-bottom:12px; }
-  table { width:100%; border-collapse:collapse; font-size:12px; }
-  th, td { border:1px solid #000; padding:6px; text-align:center; }
-<style>
-  table { 
-    page-break-inside:auto;
-  }
-
-  tr {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  thead {
-    display: table-header-group;
-  }
-
-  tfoot {
-    display: table-footer-group;
-  }
-  th { background:#eee; }
-  thead {
-    display: table-header-group;
-  }
-
-  tr {
-    page-break-inside: avoid;
-  }
-
-  .section-header {
-    page-break-before: auto;
-    page-break-after: avoid;
-    page-break-inside: avoid;
-    break-inside: avoid;
-    background: #ddd;
-    font-weight: bold;
-  }
-</style>
-</head>
-<body>
-
-<h2>SHORTLIST – ${$('ownerMonth').value}</h2>
-
-<table>
-<thead>
-<tr>
-  <th>ID NO</th>
-  <th>NAME</th>
-  <th>DATE</th>
-  <th>SHIFT</th>
-  <th>IN TIME</th>
-  <th>OUT TIME</th>
-  <th>PRESENT TIME</th>
-</tr>
-</thead>
-<tbody>
-`;
-
-  rows.forEach(r => {
-    const tds = r.querySelectorAll('td');
-    const inTime = r.querySelector('.in-time')?.value || '';
-    const outTime = r.querySelector('.out-time')?.value || '';
-    const present = r.querySelector('.present-time')?.value || '';
-
-    html += `
-<tr>
-  <td>${tds[0].innerText}</td>
-  <td>${tds[1].innerText}</td>
-  <td>${tds[2].innerText}</td>
-  <td>${tds[3].innerText}</td>
-  <td>${inTime}</td>
-  <td>${outTime}</td>
-  <td>${present}</td>
-</tr>`;
-  });
-
-  html += `
-</tbody>
-</table>
-
-<script>
-  window.onload = function() {
-    window.print();
-  }
-<\/script>
-
-</body>
-</html>
-`;
-
-  const win = window.open('', '_blank');
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-}
 document.getElementById('uploadExcel').addEventListener('change', async function(e){
 
   const file = e.target.files[0];
@@ -4365,6 +3994,13 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
+
+
+
+
+
+
+
 
 
 
