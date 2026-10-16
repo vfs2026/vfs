@@ -916,23 +916,27 @@ async function fetchMergedAttendanceForLabour(group, month, attendanceReader = f
     Promise.all(pfReadKeys.map(key => attendanceReader(key, month)))
   ]);
   const normalizeDate = day => /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : `${month}-${String(day).padStart(2, '0')}`;
-  const combined = {};
   const idDaily = {};
   const pfDaily = {};
   const add = (records, daily) => records.forEach(record => Object.entries(record?.shifts || {}).forEach(([day, value]) => {
     const shift = Number(value);
     if (!Number.isFinite(shift) || shift <= 0) return;
     const date = normalizeDate(day);
-    combined[date] = (combined[date] || 0) + shift;
     daily[date] = (daily[date] || 0) + shift;
   }));
   add(idRecords, idDaily);
   add(pfRecords, pfDaily);
+  // The same day's attendance may be present under both the labour ID and PF number.
+  // Count that date once, using the larger recorded shift value.
+  const combined = {};
+  for (const date of new Set([...Object.keys(idDaily), ...Object.keys(pfDaily)])) {
+    combined[date] = Math.max(idDaily[date] || 0, pfDaily[date] || 0);
+  }
   const sum = records => records.reduce((total, record) => total + Object.values(record?.shifts || {}).reduce((inner, value) => {
     const shift = Number(value);
     return inner + (Number.isFinite(shift) && shift > 0 ? shift : 0);
   }, 0), 0);
-  return { shifts: combined, idDaily, pfDaily, idShifts: sum(idRecords), pfShifts: sum(pfRecords), totalShifts: sum(idRecords) + sum(pfRecords) };
+  return { shifts: combined, idDaily, pfDaily, idShifts: sum(idRecords), pfShifts: sum(pfRecords), totalShifts: Object.values(combined).reduce((total, shift) => total + shift, 0) };
 }
 async function saveAttendanceForMonth(attObjMap){
   const batch = db.batch();
@@ -3636,7 +3640,10 @@ async function renderCurrentMonthBonusLabours() {
   output.appendChild(note);
 
   const months = getMonthsInDateRange(fromDate, toDate);
-  for (const identityGroup of getLinkedLabourGroups(activeLabours)) {
+  const bonusDetails = [];
+  const highestShiftsFirst = (a, b) => b.totalShifts - a.totalShifts;
+  const labourGroups = getLinkedLabourGroups(activeLabours);
+  for (const [groupIndex, identityGroup] of labourGroups.entries()) {
     const labour = getPrimaryLabourRecord(identityGroup);
     const pfNo = String(labour.pfNo || identityGroup.find(item => item.pfNo)?.pfNo || '').trim();
     const idNumbers = [...new Set(identityGroup.map(item => item.id).filter(id => id !== pfNo))];
@@ -3675,8 +3682,8 @@ async function renderCurrentMonthBonusLabours() {
         date >= fromDate && date <= toDate ? sum + shift : sum, 0);
       const pfMonthShifts = Object.entries(attendance.pfDaily || {}).reduce((sum, [date, shift]) =>
         date >= fromDate && date <= toDate ? sum + shift : sum, 0);
-      combinedTotalShifts += idMonthShifts + pfMonthShifts;
-      combinedMonthly.push({ month, idShifts: idMonthShifts, pfShifts: pfMonthShifts, total: idMonthShifts + pfMonthShifts });
+      combinedTotalShifts += monthShifts;
+      combinedMonthly.push({ month, idShifts: idMonthShifts, pfShifts: pfMonthShifts, total: monthShifts });
       monthSummary.textContent = `${month} — ${dates.length} present days, ${monthShifts.toFixed(2)} shifts`;
       monthDetails.appendChild(monthSummary);
 
@@ -3708,12 +3715,19 @@ async function renderCurrentMonthBonusLabours() {
       const monthlyPfShifts = combinedMonthly.reduce((sum, item) => sum + item.pfShifts, 0);
       bonusPdfRows.push({ id: labour.id, idNumbers, name: labour.name || '', pfNo, monthly: combinedMonthly, totalShifts: combinedTotalShifts });
       bonusEligibleRows.push({ id: labour.id, name: labour.name || '', pfNo, totalShifts: combinedTotalShifts, idShifts: monthlyIdShifts, pfShifts: monthlyPfShifts });
+      bonusDetails.push({ element: labourDetails, totalShifts: combinedTotalShifts });
+      bonusDetails.sort(highestShiftsFirst).forEach(item => output.appendChild(item.element));
     }
 
-    if (combinedTotalShifts < 5) continue;
+    note.textContent = `Loading bonus details: ${groupIndex + 1} of ${labourGroups.length} workers checked. Eligible workers are shown as they load.`;
 
-    output.appendChild(labourDetails);
+    if (combinedTotalShifts < 5) continue;
   }
+
+  bonusDetails.sort(highestShiftsFirst).forEach(item => output.appendChild(item.element));
+  note.textContent = `Only workers with at least 5 shifts are shown. Expand a labour name, then expand a month to see date, day, and shift details from ${fromDate} to ${toDate}.`;
+  bonusEligibleRows.sort(highestShiftsFirst);
+  bonusPdfRows.sort(highestShiftsFirst);
 
   if (!bonusEligibleRows.length) {
     const empty = document.createElement('p');
@@ -3792,7 +3806,7 @@ $('exportBonusXLS').onclick = () => {
   const toDate = $('bonusToDate').value;
   subtitle.textContent = fromDate && toDate ? `Attendance period: ${fromDate} to ${toDate}` : '';
   const table = document.createElement('table');
-  table.innerHTML = '<thead><tr><th>S.No</th><th>ID No/PF No</th><th>Name</th><th>Duration</th><th>Shift Split (ID+PF)</th><th>Total Shift</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>S.No</th><th>ID No/PF No</th><th>Name</th><th>Duration</th><th>ID / PF Source Shifts</th><th>Total Shift</th></tr></thead>';
   const body = document.createElement('tbody');
   const formatShift = value => Number(value.toFixed(2)).toString();
   const monthLabel = month => new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
@@ -3815,8 +3829,8 @@ $('exportBonusXLS').onclick = () => {
       : `${monthLabel(period.start)} - ${monthLabel(period.end)}`).join(' | ');
     const idTotal = months.reduce((sum, item) => sum + item.idShifts, 0);
     const pfTotal = months.reduce((sum, item) => sum + item.pfShifts, 0);
-    const grandTotal = idTotal + pfTotal;
-    const formula = `${formatShift(idTotal)}+${formatShift(pfTotal)}`;
+    const grandTotal = months.reduce((sum, item) => sum + item.total, 0);
+    const formula = `ID ${formatShift(idTotal)} | PF ${formatShift(pfTotal)}`;
     const identityPair = [...new Set([...(labour.idNumbers || [labour.id]), labour.pfNo].filter(Boolean))].join('/');
     const tr = document.createElement('tr');
     [index + 1, identityPair, labour.name || '', duration || '—', formula, formatShift(grandTotal)]
@@ -3994,7 +4008,6 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
