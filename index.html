@@ -3625,7 +3625,9 @@ async function renderBonusAttendanceReport() {
     const attendance = await fetchMergedAttendanceForLabour(identityGroup, month);
     const bounds = getMonthDateBounds(month, fromDate, toDate);
     let workingDays = 0;
-    let leaveDays = 0;
+      let leaveDays = 0;
+      let currentLeaveStreak = 0;
+      let maxLeaveStreak = 0;
     let shifts = 0;
     const dateDetails = [];
     const [startYear, startMonth, startDay] = bounds.start.split('-').map(Number);
@@ -3636,8 +3638,19 @@ async function renderBonusAttendanceReport() {
     while (cursor.getTime() <= finalDate) {
       const attendanceDate = cursor.toISOString().slice(0, 10);
       const shift = Number(attendance?.shifts?.[attendanceDate]) || 0;
-      if (shift >= BONUS_FULL_DAY_MINIMUM_SHIFT) workingDays += 1;
-      else if (shift <= 0 && !attendance?.neutralDates?.has(attendanceDate) && !officialLeaveDates.has(attendanceDate)) leaveDays += 1;
+      if (officialLeaveDates.has(attendanceDate)) {
+        // Office leave is skipped and does not break a personal-leave streak.
+      } else if (shift >= BONUS_FULL_DAY_MINIMUM_SHIFT) {
+        workingDays += 1;
+        currentLeaveStreak = 0;
+      } else if (shift > 0 || attendance?.neutralDates?.has(attendanceDate)) {
+        // Any recorded attendance, including neutral 0.5/1, breaks the streak.
+        currentLeaveStreak = 0;
+      } else {
+        leaveDays += 1;
+        currentLeaveStreak += 1;
+        maxLeaveStreak = Math.max(maxLeaveStreak, currentLeaveStreak);
+      }
       if (shift > 0) {
         shifts += shift;
         dateDetails.push({ date: attendanceDate, shift });
@@ -3646,9 +3659,9 @@ async function renderBonusAttendanceReport() {
     }
     const officeLeaveDays = officialLeaveDates.size;
 
-    // Months with more than seven leave days do not appear in the bonus detail
+    // Months with more than seven consecutive personal leave days do not appear in the bonus detail
     // and contribute no working days or shifts to this labour's bonus totals.
-    if (leaveDays > 7) continue;
+    if (maxLeaveStreak > 7) continue;
     totalQualifyingDays += workingDays;
     totalOfficeLeaveDays += officeLeaveDays;
     totalLeaveDays += leaveDays;
@@ -3753,7 +3766,7 @@ async function renderCurrentMonthBonusLabours() {
 
   const note = document.createElement('p');
   note.className = 'small muted';
-  note.textContent = 'Attendance rule: 1.5 or more shifts = 1 working day; 0.5 and 1 are neutral. Zero, A, and missing attendance count as personal leave, except dates when all active labours are absent, which count as office leave. Months with more than 7 personal leave days are excluded.';
+  note.textContent = 'Attendance rule: 1.5 or more shifts = 1 working day; 0.5 and 1 are neutral. Zero, A, and missing attendance count as personal leave. Months with more than 7 consecutive personal leave days are excluded; office leave dates are skipped and attendance breaks the streak.';
   output.appendChild(note);
 
   const table = document.createElement('table');
@@ -3815,7 +3828,9 @@ async function renderCurrentMonthBonusLabours() {
       const rangeStart = fromDate > monthStart ? fromDate : monthStart;
       const rangeEnd = toDate < monthEnd ? toDate : monthEnd;
       let workingDays = 0;
-      let leaveDays = 0;
+    let leaveDays = 0;
+    let currentLeaveStreak = 0;
+    let maxLeaveStreak = 0;
       const [rangeStartYear, rangeStartMonth, rangeStartDay] = rangeStart.split('-').map(Number);
       const [rangeEndYear, rangeEndMonth, rangeEndDay] = rangeEnd.split('-').map(Number);
       const cursor = new Date(Date.UTC(rangeStartYear, rangeStartMonth - 1, rangeStartDay));
@@ -3824,12 +3839,22 @@ async function renderCurrentMonthBonusLabours() {
       while (cursor.getTime() <= finalDate) {
         const date = cursor.toISOString().slice(0, 10);
         const shift = Number(shiftsByDate[date]) || 0;
-        if (shift >= BONUS_FULL_DAY_MINIMUM_SHIFT) workingDays += 1;
-        else if (shift <= 0 && !attendance?.neutralDates?.has(date) && !officialLeaveDates.has(date)) leaveDays += 1;
-        // Positive values below 1.5 (including 0.5 and 1) are neutral.
+        if (officialLeaveDates.has(date)) {
+          // Office leave is skipped and does not break a personal-leave streak.
+        } else if (shift >= BONUS_FULL_DAY_MINIMUM_SHIFT) {
+          workingDays += 1;
+          currentLeaveStreak = 0;
+        } else if (shift > 0 || attendance?.neutralDates?.has(date)) {
+          // Attendance, including neutral 0.5/1, breaks a continuous leave streak.
+          currentLeaveStreak = 0;
+        } else {
+          leaveDays += 1;
+          currentLeaveStreak += 1;
+          maxLeaveStreak = Math.max(maxLeaveStreak, currentLeaveStreak);
+        }
         cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
-      if (leaveDays > 7 || workingDays <= 0) continue;
+      if (maxLeaveStreak > 7 || workingDays <= 0) continue;
       workingMonths.push({ month, days: workingDays });
       totalDays += workingDays;
     }
@@ -3857,13 +3882,13 @@ async function renderCurrentMonthBonusLabours() {
   bonusPdfRows = bonusEligibleRows.slice();
   renderRows();
   note.textContent = 'Working days count dates with at least ' + BONUS_FULL_DAY_MINIMUM_SHIFT +
-    ' shifts; 0.5 and 1 are neutral. Zero, A, and missing attendance count as personal leave, except dates when all active labours are absent, which count as office leave. Months with more than 7 personal leave days are excluded. Minimum qualifying total: ' + BONUS_MINIMUM_DAYS + ' working days.';
+    ' shifts; 0.5 and 1 are neutral. Zero, A, and missing attendance count as personal leave. Office leave dates are skipped without breaking the streak, and any attendance breaks it. Months with more than 7 consecutive personal leave days are excluded. Minimum qualifying total: ' + BONUS_MINIMUM_DAYS + ' working days.';
 
   if (!bonusEligibleRows.length) {
     const empty = document.createElement('p');
     empty.className = 'small muted';
     empty.textContent = 'No active labour has at least ' + BONUS_MINIMUM_DAYS +
-      ' working days in the selected date range after excluding months with more than 7 leave days.';
+      ' working days in the selected date range after excluding months with more than 7 consecutive personal leave days.';
     output.appendChild(empty);
   }
   bonusPdfRowsReady = true;
