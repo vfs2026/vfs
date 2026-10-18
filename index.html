@@ -109,6 +109,8 @@ table thead th.sticky-check{
   .small{font-size:12px;color:#555}
   .muted{color:#666}
   .hidden{display:none}
+  #bonusCurrentLabours .bonus-months-cell{white-space:normal;min-width:135px;max-width:180px;line-height:1.25}
+  #bonusCurrentLabours .bonus-days-cell{white-space:normal;min-width:90px;max-width:110px;line-height:1.25}
   
   /* CRITICAL FIX: Add max-height to force internal scrolling required for position:sticky */
   .table-wrap{
@@ -486,10 +488,10 @@ table thead th.sticky-check{
     <div class="table-wrap">
       <table id="bonusAttendanceTable">
         <thead>
-          <tr><th>Month</th><th>Present Days</th><th>Total Shifts</th></tr>
+          <tr><th>Month</th><th>Working Days</th><th>Office Leave Days</th><th>Personal Leave Days</th><th>Total Shifts</th></tr>
         </thead>
         <tbody>
-          <tr><td colspan="3">Choose dates and a labour, then select Show Attendance.</td></tr>
+          <tr><td colspan="5">Choose dates and a labour, then select Show Attendance.</td></tr>
         </tbody>
       </table>
     </div>
@@ -918,11 +920,19 @@ async function fetchMergedAttendanceForLabour(group, month, attendanceReader = f
   const normalizeDate = day => /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : `${month}-${String(day).padStart(2, '0')}`;
   const idDaily = {};
   const pfDaily = {};
+  const idNeutralDates = new Set();
+  const pfNeutralDates = new Set();
   const add = (records, daily) => records.forEach(record => Object.entries(record?.shifts || {}).forEach(([day, value]) => {
-    const shift = Number(value);
-    if (!Number.isFinite(shift) || shift <= 0) return;
     const date = normalizeDate(day);
-    daily[date] = (daily[date] || 0) + shift;
+    const isLeaveMark = String(value ?? '').trim().toUpperCase() === 'A';
+    const shift = isLeaveMark ? 0 : Number(value);
+    if (!Number.isFinite(shift)) {
+      (daily === idDaily ? idNeutralDates : pfNeutralDates).add(date);
+      return;
+    }
+    // Keep the strongest numeric entry across linked IDs/PF numbers.
+    // A/0 is leave only when no linked record has a positive attendance value.
+    daily[date] = Math.max(daily[date] ?? 0, shift);
   }));
   add(idRecords, idDaily);
   add(pfRecords, pfDaily);
@@ -930,13 +940,22 @@ async function fetchMergedAttendanceForLabour(group, month, attendanceReader = f
   // Count that date once, using the larger recorded shift value.
   const combined = {};
   for (const date of new Set([...Object.keys(idDaily), ...Object.keys(pfDaily)])) {
-    combined[date] = Math.max(idDaily[date] || 0, pfDaily[date] || 0);
+    const idValue = idDaily[date];
+    const pfValue = pfDaily[date];
+    // Use the highest value so linked-ID/PF duplicates count once.
+    combined[date] = Math.max(idValue ?? 0, pfValue ?? 0);
+  }
+  const numericDates = new Set([...Object.keys(idDaily), ...Object.keys(pfDaily)]);
+  const neutralDates = new Set([...idNeutralDates, ...pfNeutralDates]);
+  numericDates.forEach(date => neutralDates.delete(date));
+  for (const [date, shift] of Object.entries(combined)) {
+    if (shift > 0 && shift < BONUS_FULL_DAY_MINIMUM_SHIFT) neutralDates.add(date);
   }
   const sum = records => records.reduce((total, record) => total + Object.values(record?.shifts || {}).reduce((inner, value) => {
     const shift = Number(value);
     return inner + (Number.isFinite(shift) && shift > 0 ? shift : 0);
   }, 0), 0);
-  return { shifts: combined, idDaily, pfDaily, idShifts: sum(idRecords), pfShifts: sum(pfRecords), totalShifts: Object.values(combined).reduce((total, shift) => total + shift, 0) };
+  return { shifts: combined, neutralDates, idDaily, pfDaily, idShifts: sum(idRecords), pfShifts: sum(pfRecords), totalShifts: Object.values(combined).reduce((total, shift) => total + shift, 0) };
 }
 async function saveAttendanceForMonth(attObjMap){
   const batch = db.batch();
@@ -3495,6 +3514,55 @@ function getMonthsInDateRange(fromDate, toDate) {
   return months;
 }
 
+function getMonthDateBounds(month, fromDate, toDate) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const monthStart = month + '-01';
+  const monthEnd = month + '-' + String(new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()).padStart(2, '0');
+  return {
+    start: fromDate > monthStart ? fromDate : monthStart,
+    end: toDate < monthEnd ? toDate : monthEnd
+  };
+}
+
+function getInclusiveDateCount(startDate, endDate) {
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  const start = Date.UTC(startYear, startMonth - 1, startDay);
+  const end = Date.UTC(endYear, endMonth - 1, endDay);
+  return Math.max(0, Math.round((end - start) / 86400000) + 1);
+}
+
+function labourGroupActiveInMonth(group, month) {
+  return group.some(labour =>
+    (!labour.activeFrom || labour.activeFrom <= month) &&
+    !(labour.status === 'inactive' && labour.inactiveFrom && labour.inactiveFrom <= month)
+  );
+}
+
+async function getCompanyOfficialLeaveDates(labourGroups, month, startDate, endDate, attendanceReader = fetchAttendance) {
+  const activeGroups = labourGroups.filter(group => labourGroupActiveInMonth(group, month));
+  const records = await Promise.all(activeGroups.map(group => fetchMergedAttendanceForLabour(group, month, attendanceReader)));
+  const attendedDates = new Set();
+  records.forEach(record => Object.entries(record?.shifts || {}).forEach(([dateKey, value]) => {
+    const shift = Number(value);
+    if (!Number.isFinite(shift) || shift <= 0) return;
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateKey) ? dateKey : `${month}-${String(dateKey).padStart(2, '0')}`;
+    attendedDates.add(date);
+  }));
+
+  const officialLeaveDates = new Set();
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  const cursor = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+  const finalDate = Date.UTC(endYear, endMonth - 1, endDay);
+  while (cursor.getTime() <= finalDate) {
+    const date = cursor.toISOString().slice(0, 10);
+    if (!attendedDates.has(date)) officialLeaveDates.add(date);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return officialLeaveDates;
+}
+
 async function renderBonusAttendanceReport() {
   const fromDate = $('bonusFromDate').value;
   const toDate = $('bonusToDate').value;
@@ -3531,7 +3599,7 @@ async function renderBonusAttendanceReport() {
     tbody.replaceChildren();
     const row = tbody.insertRow();
     const cell = row.insertCell();
-    cell.colSpan = 3;
+    cell.colSpan = 5;
     cell.textContent = matchingGroups.length ? 'More than one labour found. Enter the exact ID, PF number, or full name.' : 'No labour found.';
     return;
   }
@@ -3539,7 +3607,15 @@ async function renderBonusAttendanceReport() {
   const identityGroup = matchingGroups[0];
   const labour = getPrimaryLabourRecord(identityGroup);
   const months = getMonthsInDateRange(fromDate, toDate);
-  let totalDays = 0;
+  const allIdentityGroups = getLinkedLabourGroups(labours);
+  const officialLeaveByMonth = new Map();
+  for (const month of months) {
+    const bounds = getMonthDateBounds(month, fromDate, toDate);
+    officialLeaveByMonth.set(month, await getCompanyOfficialLeaveDates(allIdentityGroups, month, bounds.start, bounds.end));
+  }
+  let totalQualifyingDays = 0;
+  let totalOfficeLeaveDays = 0;
+  let totalLeaveDays = 0;
   let totalShifts = 0;
   tbody.innerHTML = '';
   $('bonusDateDetails').classList.add('hidden');
@@ -3547,41 +3623,56 @@ async function renderBonusAttendanceReport() {
 
   for (const month of months) {
     const attendance = await fetchMergedAttendanceForLabour(identityGroup, month);
-    let presentDays = 0;
+    const bounds = getMonthDateBounds(month, fromDate, toDate);
+    let workingDays = 0;
+    let leaveDays = 0;
     let shifts = 0;
     const dateDetails = [];
-
-    Object.entries(attendance?.shifts || {}).forEach(([attendanceDate, shiftValue]) => {
-      const shift = Number(shiftValue) || 0;
-      if (attendanceDate >= fromDate && attendanceDate <= toDate && shift > 0) {
-        presentDays += 1;
+    const [startYear, startMonth, startDay] = bounds.start.split('-').map(Number);
+    const [endYear, endMonth, endDay] = bounds.end.split('-').map(Number);
+    const cursor = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+    const finalDate = Date.UTC(endYear, endMonth - 1, endDay);
+    const officialLeaveDates = officialLeaveByMonth.get(month) || new Set();
+    while (cursor.getTime() <= finalDate) {
+      const attendanceDate = cursor.toISOString().slice(0, 10);
+      const shift = Number(attendance?.shifts?.[attendanceDate]) || 0;
+      if (shift >= BONUS_FULL_DAY_MINIMUM_SHIFT) workingDays += 1;
+      else if (shift <= 0 && !attendance?.neutralDates?.has(attendanceDate) && !officialLeaveDates.has(attendanceDate)) leaveDays += 1;
+      if (shift > 0) {
         shifts += shift;
         dateDetails.push({ date: attendanceDate, shift });
       }
-    });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    const officeLeaveDays = officialLeaveDates.size;
 
-    totalDays += presentDays;
+    // Months with more than seven leave days do not appear in the bonus detail
+    // and contribute no working days or shifts to this labour's bonus totals.
+    if (leaveDays > 7) continue;
+    totalQualifyingDays += workingDays;
+    totalOfficeLeaveDays += officeLeaveDays;
+    totalLeaveDays += leaveDays;
     totalShifts += shifts;
     const tr = document.createElement('tr');
     tr.dataset.month = month;
     tr.dataset.dateDetails = JSON.stringify(dateDetails);
-    tr.innerHTML = `<td>${month}</td><td><button type="button" class="bonus-present-days" style="padding:4px 8px;color:#0b79ff" title="Show date-wise attendance">▼ ${presentDays}</button></td><td>${shifts.toFixed(2)}</td>`;
+    tr.innerHTML = `<td>${month}</td><td><button type="button" class="bonus-present-days" style="padding:4px 8px;color:#0b79ff" title="Show date-wise attendance">▼ ${workingDays}</button></td><td>${officeLeaveDays}</td><td>${leaveDays}</td><td>${shifts.toFixed(2)}</td>`;
     tbody.appendChild(tr);
   }
 
   const totalRow = document.createElement('tr');
-  totalRow.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalDays}</strong></td><td><strong>${totalShifts.toFixed(2)}</strong></td>`;
+  totalRow.innerHTML = `<td><strong>Total qualifying days</strong></td><td><strong>${totalQualifyingDays}</strong></td><td><strong>${totalOfficeLeaveDays}</strong></td><td><strong>${totalLeaveDays}</strong></td><td><strong>${totalShifts.toFixed(2)}</strong></td>`;
   tbody.appendChild(totalRow);
   const linkedIds = identityGroup.map(item => item.id).filter(id => id !== String(labour.pfNo || '').trim());
   const linkedPf = [...new Set(identityGroup.map(item => String(item.pfNo || '').trim()).filter(Boolean))];
-  title.textContent = `${linkedIds.join(' / ')} - ${labour.name || ''}${linkedPf.length ? ` | PF: ${linkedPf.join(' / ')}` : ''} | ${fromDate} to ${toDate} | ${totalShifts < 5 ? 'Not eligible for bonus (fewer than 5 shifts)' : 'Eligible for bonus'}`;
+  title.textContent = `${linkedIds.join(' / ')} - ${labour.name || ''}${linkedPf.length ? ` | PF: ${linkedPf.join(' / ')}` : ''} | ${fromDate} to ${toDate} | ${totalQualifyingDays < BONUS_MINIMUM_DAYS ? 'Not eligible for bonus (fewer than 5 working days)' : 'Eligible for bonus'}`;
   } catch (error) {
     console.error('Bonus attendance report failed:', error);
     title.textContent = `Could not load bonus attendance: ${error.message || error}`;
     tbody.replaceChildren();
     const row = tbody.insertRow();
     const cell = row.insertCell();
-    cell.colSpan = 3;
+    cell.colSpan = 5;
     cell.textContent = 'Check your Firestore connection and access, then try again.';
   } finally {
     button.disabled = false;
@@ -3593,17 +3684,44 @@ $('showBonusAttendance').onclick = renderBonusAttendanceReport;
 let bonusEligibleRows = [];
 let bonusPdfRows = [];
 let bonusPdfRowsReady = false;
+const BONUS_FULL_DAY_MINIMUM_SHIFT = 1.5;
+const BONUS_MINIMUM_DAYS = 5;
+
+function formatBonusDays(value) {
+  return Number(value.toFixed(2)).toString();
+}
+
+function getBonusMonthLabel(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const name = new Date(Date.UTC(year, monthNumber - 1, 1))
+    .toLocaleString('en', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+  return name;
+}
+
+function formatBonusMonthsTwoLines(workingMonths) {
+  const labels = workingMonths.map(entry => getBonusMonthLabel(entry.month));
+  const splitAt = Math.ceil(labels.length / 2);
+  return [labels.slice(0, splitAt).join(', '), labels.slice(splitAt).join(', ')]
+    .filter(Boolean).join('<br>');
+}
+
+function formatBonusDaysTwoLines(workingMonths) {
+  const values = workingMonths.map(entry => formatBonusDays(entry.days));
+  const splitAt = Math.ceil(values.length / 2);
+  return [values.slice(0, splitAt).join(' + '), values.slice(splitAt).join(' + ')]
+    .filter(Boolean).join('<br>');
+}
 
 async function renderCurrentMonthBonusLabours() {
   const currentMonth = getMonth();
-  const defaultFromDate = `${currentMonth}-01`;
+  const defaultFromDate = currentMonth + '-01';
   const today = new Date().toISOString().slice(0, 10);
   const fromDate = $('bonusFromDate').value || defaultFromDate;
   const toDate = $('bonusToDate').value || today;
   const output = $('bonusCurrentLabours');
   const attendanceCache = new Map();
   const getCachedAttendance = (labourId, month) => {
-    const key = `${labourId}_${month}`;
+    const key = labourId + '_' + month;
     if (!attendanceCache.has(key)) attendanceCache.set(key, fetchAttendance(labourId, month));
     return attendanceCache.get(key);
   };
@@ -3616,12 +3734,11 @@ async function renderCurrentMonthBonusLabours() {
   bonusEligibleRows = [];
   bonusPdfRows = [];
   bonusPdfRowsReady = false;
-  output.innerHTML = '<p class="small muted">Loading attendance details…</p>';
+  output.innerHTML = '<p class="small muted">Loading bonus days…</p>';
   output.classList.remove('hidden');
 
   const labourSnap = await db.collection('labours').get();
-  const allLabours = labourSnap.docs
-    .map(doc => ({ ...(doc.data() || {}), id: doc.id }));
+  const allLabours = labourSnap.docs.map(doc => ({ ...(doc.data() || {}), id: doc.id }));
   const activeLabours = allLabours
     .filter(labour =>
       (!labour.activeFrom || labour.activeFrom <= currentMonth) &&
@@ -3631,113 +3748,126 @@ async function renderCurrentMonthBonusLabours() {
 
   output.innerHTML = '';
   const title = document.createElement('h4');
-  title.textContent = `Bonus Eligible Labour — ${fromDate} to ${toDate}`;
+  title.textContent = 'Bonus Eligible Labour — ' + fromDate + ' to ' + toDate;
   output.appendChild(title);
 
   const note = document.createElement('p');
   note.className = 'small muted';
-  note.textContent = `Only workers with at least 5 shifts are shown. Expand a labour name, then expand a month to see date, day, and shift details from ${fromDate} to ${toDate}.`;
+  note.textContent = 'Attendance rule: 1.5 or more shifts = 1 working day; 0.5 and 1 are neutral. Zero, A, and missing attendance count as personal leave, except dates when all active labours are absent, which count as office leave. Months with more than 7 personal leave days are excluded.';
   output.appendChild(note);
 
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>S.No</th><th>PF/ID No</th><th>Name</th><th>Working Months</th><th>Working Days (by month)</th><th>Total Days</th></tr></thead>';
+  const body = document.createElement('tbody');
+  table.appendChild(body);
+  output.appendChild(table);
+
   const months = getMonthsInDateRange(fromDate, toDate);
-  const bonusDetails = [];
-  const highestShiftsFirst = (a, b) => b.totalShifts - a.totalShifts;
   const labourGroups = getLinkedLabourGroups(activeLabours);
+  const companyLabourGroups = getLinkedLabourGroups(allLabours);
+  const officialLeaveByMonth = new Map();
+  for (const month of months) {
+    const year = Number(month.slice(0, 4));
+    const monthNumber = Number(month.slice(5, 7));
+    const monthStart = month + '-01';
+    const monthEnd = month + '-' + String(new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()).padStart(2, '0');
+    const rangeStart = fromDate > monthStart ? fromDate : monthStart;
+    const rangeEnd = toDate < monthEnd ? toDate : monthEnd;
+    officialLeaveByMonth.set(month, await getCompanyOfficialLeaveDates(companyLabourGroups, month, rangeStart, rangeEnd, getCachedAttendance));
+  }
+  const highestDaysFirst = (a, b) => b.totalDays - a.totalDays;
+
+  const renderRows = () => {
+    body.replaceChildren(...bonusEligibleRows.map((item, index) => {
+      const row = document.createElement('tr');
+      [
+        index + 1,
+        item.identityNo,
+        item.name,
+        formatBonusMonthsTwoLines(item.workingMonths),
+        formatBonusDaysTwoLines(item.workingMonths),
+        formatBonusDays(item.totalDays)
+      ].forEach((value, columnIndex) => {
+        const cell = document.createElement('td');
+        if (value.includes?.('<br>')) {
+          cell.className = columnIndex === 3 ? 'bonus-months-cell' : 'bonus-days-cell';
+          cell.innerHTML = value;
+        } else cell.textContent = String(value);
+        row.appendChild(cell);
+      });
+      return row;
+    }));
+  };
+
   for (const [groupIndex, identityGroup] of labourGroups.entries()) {
     const labour = getPrimaryLabourRecord(identityGroup);
     const pfNo = String(labour.pfNo || identityGroup.find(item => item.pfNo)?.pfNo || '').trim();
     const idNumbers = [...new Set(identityGroup.map(item => item.id).filter(id => id !== pfNo))];
-    const labourDetails = document.createElement('details');
-    labourDetails.style.marginBottom = '8px';
-    labourDetails.style.padding = '8px';
-    labourDetails.style.border = '1px solid #d6e0ef';
-    labourDetails.style.borderRadius = '8px';
+    const workingMonths = [];
+    let totalDays = 0;
 
-    const labourSummary = document.createElement('summary');
-    labourSummary.style.cursor = 'pointer';
-    labourSummary.style.fontWeight = 'bold';
-    labourSummary.textContent = `${idNumbers.join(' / ')} - ${labour.name || ''}${pfNo ? ` | PF: ${pfNo}` : ''} | Total Shift: 0.00`;
-    labourDetails.appendChild(labourSummary);
-
-    let labourTotalShifts = 0;
-    let combinedTotalShifts = 0;
-    const combinedMonthly = [];
     for (const month of months) {
       const attendance = await fetchMergedAttendanceForLabour(identityGroup, month, getCachedAttendance);
-      const dates = Object.entries(attendance?.shifts || {})
-        .map(([date, shiftValue]) => ({
-          date,
-          shift: Number(shiftValue) || 0
-        }))
-        .filter(item => item.date >= fromDate && item.date <= toDate && item.shift > 0)
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      const monthDetails = document.createElement('details');
-      monthDetails.style.margin = '8px 0 0 18px';
-      const monthSummary = document.createElement('summary');
-      monthSummary.style.cursor = 'pointer';
-      const monthShifts = dates.reduce((sum, item) => sum + item.shift, 0);
-      labourTotalShifts += monthShifts;
-      const idMonthShifts = Object.entries(attendance.idDaily || {}).reduce((sum, [date, shift]) =>
-        date >= fromDate && date <= toDate ? sum + shift : sum, 0);
-      const pfMonthShifts = Object.entries(attendance.pfDaily || {}).reduce((sum, [date, shift]) =>
-        date >= fromDate && date <= toDate ? sum + shift : sum, 0);
-      combinedTotalShifts += monthShifts;
-      combinedMonthly.push({ month, idShifts: idMonthShifts, pfShifts: pfMonthShifts, total: monthShifts });
-      monthSummary.textContent = `${month} — ${dates.length} present days, ${monthShifts.toFixed(2)} shifts`;
-      monthDetails.appendChild(monthSummary);
-
-      const dateTable = document.createElement('table');
-      dateTable.style.marginTop = '6px';
-      dateTable.innerHTML = '<thead><tr><th>Date</th><th>Day</th><th>Shift</th></tr></thead>';
-      const dateBody = document.createElement('tbody');
-      if (dates.length) {
-        dates.forEach(item => {
-          const row = document.createElement('tr');
-          const dayName = new Date(`${item.date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long' });
-          row.innerHTML = `<td>${item.date}</td><td>${dayName}</td><td>${item.shift.toFixed(2)}</td>`;
-          dateBody.appendChild(row);
-        });
-      } else {
-        const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="3">No attendance in this month for the selected range.</td>';
-        dateBody.appendChild(row);
+      const shiftsByDate = attendance?.shifts || {};
+      const [year, monthNumber] = month.split('-').map(Number);
+      const monthStart = month + '-01';
+      const monthEnd = month + '-' + String(new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()).padStart(2, '0');
+      const rangeStart = fromDate > monthStart ? fromDate : monthStart;
+      const rangeEnd = toDate < monthEnd ? toDate : monthEnd;
+      let workingDays = 0;
+      let leaveDays = 0;
+      const [rangeStartYear, rangeStartMonth, rangeStartDay] = rangeStart.split('-').map(Number);
+      const [rangeEndYear, rangeEndMonth, rangeEndDay] = rangeEnd.split('-').map(Number);
+      const cursor = new Date(Date.UTC(rangeStartYear, rangeStartMonth - 1, rangeStartDay));
+      const finalDate = Date.UTC(rangeEndYear, rangeEndMonth - 1, rangeEndDay);
+      const officialLeaveDates = officialLeaveByMonth.get(month) || new Set();
+      while (cursor.getTime() <= finalDate) {
+        const date = cursor.toISOString().slice(0, 10);
+        const shift = Number(shiftsByDate[date]) || 0;
+        if (shift >= BONUS_FULL_DAY_MINIMUM_SHIFT) workingDays += 1;
+        else if (shift <= 0 && !attendance?.neutralDates?.has(date) && !officialLeaveDates.has(date)) leaveDays += 1;
+        // Positive values below 1.5 (including 0.5 and 1) are neutral.
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
-      dateTable.appendChild(dateBody);
-      monthDetails.appendChild(dateTable);
-      labourDetails.appendChild(monthDetails);
+      if (leaveDays > 7 || workingDays <= 0) continue;
+      workingMonths.push({ month, days: workingDays });
+      totalDays += workingDays;
     }
 
-    labourSummary.textContent = `${idNumbers.join(' / ')} - ${labour.name || ''}${pfNo ? ` | PF: ${pfNo}` : ''} | Total Shift: ${combinedTotalShifts.toFixed(2)}`;
-
-    if (combinedTotalShifts >= 5) {
-      const monthlyIdShifts = combinedMonthly.reduce((sum, item) => sum + item.idShifts, 0);
-      const monthlyPfShifts = combinedMonthly.reduce((sum, item) => sum + item.pfShifts, 0);
-      bonusPdfRows.push({ id: labour.id, idNumbers, name: labour.name || '', pfNo, monthly: combinedMonthly, totalShifts: combinedTotalShifts });
-      bonusEligibleRows.push({ id: labour.id, name: labour.name || '', pfNo, totalShifts: combinedTotalShifts, idShifts: monthlyIdShifts, pfShifts: monthlyPfShifts });
-      bonusDetails.push({ element: labourDetails, totalShifts: combinedTotalShifts });
-      bonusDetails.sort(highestShiftsFirst).forEach(item => output.appendChild(item.element));
+    if (!workingMonths.length || totalDays < BONUS_MINIMUM_DAYS) {
+      note.textContent = 'Loading bonus days: ' + (groupIndex + 1) + ' of ' + labourGroups.length + ' workers checked.';
+      continue;
     }
 
-    note.textContent = `Loading bonus details: ${groupIndex + 1} of ${labourGroups.length} workers checked. Eligible workers are shown as they load.`;
-
-    if (combinedTotalShifts < 5) continue;
+    const rowData = {
+      id: labour.id,
+      identityNo: [...new Set([pfNo, ...idNumbers].filter(Boolean))].join(' / '),
+      name: labour.name || '',
+      workingMonths,
+      totalDays
+    };
+    bonusEligibleRows.push(rowData);
+    bonusEligibleRows.sort(highestDaysFirst);
+    bonusPdfRows = bonusEligibleRows.slice();
+    renderRows();
+    note.textContent = 'Loading bonus days: ' + (groupIndex + 1) + ' of ' + labourGroups.length + ' workers checked.';
   }
 
-  bonusDetails.sort(highestShiftsFirst).forEach(item => output.appendChild(item.element));
-  note.textContent = `Only workers with at least 5 shifts are shown. Expand a labour name, then expand a month to see date, day, and shift details from ${fromDate} to ${toDate}.`;
-  bonusEligibleRows.sort(highestShiftsFirst);
-  bonusPdfRows.sort(highestShiftsFirst);
+  bonusEligibleRows.sort(highestDaysFirst);
+  bonusPdfRows = bonusEligibleRows.slice();
+  renderRows();
+  note.textContent = 'Working days count dates with at least ' + BONUS_FULL_DAY_MINIMUM_SHIFT +
+    ' shifts; 0.5 and 1 are neutral. Zero, A, and missing attendance count as personal leave, except dates when all active labours are absent, which count as office leave. Months with more than 7 personal leave days are excluded. Minimum qualifying total: ' + BONUS_MINIMUM_DAYS + ' working days.';
 
   if (!bonusEligibleRows.length) {
     const empty = document.createElement('p');
     empty.className = 'small muted';
-    empty.textContent = 'No active labour has at least 5 shifts in the selected date range.';
+    empty.textContent = 'No active labour has at least ' + BONUS_MINIMUM_DAYS +
+      ' working days in the selected date range after excluding months with more than 7 leave days.';
     output.appendChild(empty);
   }
   bonusPdfRowsReady = true;
 }
-
 $('showCurrentMonthLabours').onclick = async () => {
   const button = $('showCurrentMonthLabours');
   button.disabled = true;
@@ -3760,24 +3890,37 @@ function requireBonusEligibleRows() {
 
 $('exportBonusCSV').onclick = () => {
   if (!requireBonusEligibleRows()) return;
-  const csvRows = ['Name,Total Shift'].concat(
-    bonusEligibleRows.map(row => `"${row.name.replace(/"/g, '""')}",${row.totalShifts.toFixed(2)}`)
-  );
+  const headers = ['S.No', 'PF/ID No', 'Name', 'Working Months', 'Working Days (by month)', 'Total Days'];
+  const csvCell = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const csvRows = [headers.map(csvCell).join(',')];
+  bonusEligibleRows.forEach((row, index) => csvRows.push([
+    index + 1,
+    row.identityNo,
+    row.name,
+    row.workingMonths.map(item => getBonusMonthLabel(item.month)).join(', '),
+    row.workingMonths.map(item => formatBonusDays(item.days)).join(' + '),
+    formatBonusDays(row.totalDays)
+  ].map(csvCell).join(',')));
   downloadBlob(csvRows.join('\n'), 'bonus_eligible_labours.csv', 'text/csv');
 };
 
 $('exportBonusXLS').onclick = () => {
   if (!requireBonusEligibleRows()) return;
   const table = document.createElement('table');
-  table.innerHTML = '<thead><tr><th>Name</th><th>Total Shift</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>S.No</th><th>PF/ID No</th><th>Name</th><th>Working Months</th><th>Working Days (by month)</th><th>Total Days</th></tr></thead>';
   const body = document.createElement('tbody');
-  bonusEligibleRows.forEach(row => {
+  bonusEligibleRows.forEach((row, index) => {
     const tr = document.createElement('tr');
-    const name = document.createElement('td');
-    const shifts = document.createElement('td');
-    name.textContent = row.name;
-    shifts.textContent = row.totalShifts.toFixed(2);
-    tr.append(name, shifts);
+    [index + 1, row.identityNo, row.name,
+      formatBonusMonthsTwoLines(row.workingMonths),
+      formatBonusDaysTwoLines(row.workingMonths),
+      formatBonusDays(row.totalDays)
+    ].forEach(value => {
+      const cell = document.createElement('td');
+      if (value.includes?.('<br>')) cell.innerHTML = value;
+      else cell.textContent = String(value);
+      tr.appendChild(cell);
+    });
     body.appendChild(tr);
   });
   table.appendChild(body);
@@ -3790,7 +3933,7 @@ $('exportBonusXLS').onclick = () => {
     return;
   }
   if (!bonusPdfRows.length) {
-    alert('No labour has at least 5 combined shifts under the labour ID and PF number in this date range.');
+    alert('No eligible labour days are available in this date range.');
     return;
   }
   if (typeof html2pdf !== 'function') {
@@ -3798,56 +3941,57 @@ $('exportBonusXLS').onclick = () => {
     return;
   }
   try {
-  const printable = document.createElement('div');
-  const title = document.createElement('h3');
-  title.textContent = 'Bonus Eligible Labour — Minimum 5 Shifts';
-  const subtitle = document.createElement('p');
   const fromDate = $('bonusFromDate').value;
   const toDate = $('bonusToDate').value;
-  subtitle.textContent = fromDate && toDate ? `Attendance period: ${fromDate} to ${toDate}` : '';
-  const table = document.createElement('table');
-  table.innerHTML = '<thead><tr><th>S.No</th><th>ID No/PF No</th><th>Name</th><th>Duration</th><th>ID / PF Source Shifts</th><th>Total Shift</th></tr></thead>';
-  const body = document.createElement('tbody');
-  const formatShift = value => Number(value.toFixed(2)).toString();
-  const monthLabel = month => new Date(`${month}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-  bonusPdfRows.forEach((labour, index) => {
-    const months = labour.monthly.filter(item => item.total > 0);
-    const periods = [];
-    months.forEach(item => {
-      const previous = periods[periods.length - 1];
-      const monthIndex = Number(item.month.slice(0, 4)) * 12 + Number(item.month.slice(5, 7));
-      if (!previous || monthIndex - previous.endIndex > 1) {
-        periods.push({ start: item.month, end: item.month, endIndex: monthIndex, shifts: [item.total] });
-      } else {
-        previous.end = item.month;
-        previous.endIndex = monthIndex;
-        previous.shifts.push(item.total);
-      }
+  const printable = document.createElement('div');
+  printable.className = 'bonus-print-root';
+  const printStyle = document.createElement('style');
+  printStyle.textContent = `#bonusPrintRoot{width:281mm;margin:0;padding:0;color:#000;font-family:Arial,sans-serif;font-size:9pt}.bonus-pdf-page{width:281mm;box-sizing:border-box;margin:0;padding:0;break-inside:avoid;page-break-inside:avoid}.bonus-pdf-page-next{break-before:page;page-break-before:always}.bonus-pdf-title{margin:0 0 3mm;color:#000;font-size:12pt;font-weight:700}.bonus-pdf-subtitle{margin:0 0 4mm;color:#000;font-size:8pt;font-weight:600}.bonus-print-table{width:281mm;margin:0;table-layout:fixed;border-collapse:collapse;font-size:9pt;color:#000}.bonus-print-table thead{display:table-header-group}.bonus-print-table th,.bonus-print-table td{position:static!important;top:auto!important;z-index:auto!important;border:1px solid #222;padding:1.5mm 1mm;text-align:center;white-space:normal;overflow-wrap:anywhere;vertical-align:middle;color:#000;font-weight:600}.bonus-print-table th{background:#eef3f8;font-weight:700}.bonus-print-table th:nth-child(1),.bonus-print-table td:nth-child(1){width:8mm}.bonus-print-table th:nth-child(2),.bonus-print-table td:nth-child(2){width:29mm}.bonus-print-table th:nth-child(3),.bonus-print-table td:nth-child(3){width:50mm}.bonus-print-table th:nth-child(4),.bonus-print-table td:nth-child(4){width:52mm;line-height:1.2}.bonus-print-table th:nth-child(5),.bonus-print-table td:nth-child(5){width:120mm;line-height:1.2}.bonus-print-table th:nth-child(6),.bonus-print-table td:nth-child(6){width:22mm}.bonus-print-table tr{break-inside:avoid;page-break-inside:avoid}`;
+  printStyle.id = 'bonusPrintStyle';
+  printable.id = 'bonusPrintRoot';
+  document.head.appendChild(printStyle);
+  const rowsPerPage = 15;
+  const pageCount = Math.max(1, Math.ceil(bonusPdfRows.length / rowsPerPage));
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+    const page = document.createElement('section');
+    page.className = 'bonus-pdf-page';
+    if (pageIndex > 0) page.classList.add('bonus-pdf-page-next');
+    const title = document.createElement('h3');
+    title.className = 'bonus-pdf-title';
+    title.textContent = 'Bonus Eligible Labour — Days';
+    const subtitle = document.createElement('p');
+    subtitle.className = 'bonus-pdf-subtitle';
+    subtitle.textContent = fromDate && toDate ? `Attendance period: ${fromDate} to ${toDate}` : '';
+    const table = document.createElement('table');
+    table.className = 'bonus-print-table';
+    table.innerHTML = '<colgroup><col style="width:8mm"><col style="width:29mm"><col style="width:50mm"><col style="width:52mm"><col style="width:120mm"><col style="width:22mm"></colgroup><thead><tr><th>S.No</th><th>PF/ID No</th><th>Name</th><th>Working Months</th><th>Working Days (by month)</th><th>Total Days</th></tr></thead>';
+    const body = document.createElement('tbody');
+    const pageRows = bonusPdfRows.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+    pageRows.forEach((labour, rowIndex) => {
+      const tr = document.createElement('tr');
+      [pageIndex * rowsPerPage + rowIndex + 1, labour.identityNo, labour.name,
+        formatBonusMonthsTwoLines(labour.workingMonths),
+        formatBonusDaysTwoLines(labour.workingMonths),
+        formatBonusDays(labour.totalDays)
+      ].forEach(value => {
+        const td = document.createElement('td');
+        if (typeof value === 'string' && value.includes('<br>')) td.innerHTML = value;
+        else td.textContent = String(value);
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
     });
-    const duration = periods.map(period => period.start === period.end
-      ? monthLabel(period.start)
-      : `${monthLabel(period.start)} - ${monthLabel(period.end)}`).join(' | ');
-    const idTotal = months.reduce((sum, item) => sum + item.idShifts, 0);
-    const pfTotal = months.reduce((sum, item) => sum + item.pfShifts, 0);
-    const grandTotal = months.reduce((sum, item) => sum + item.total, 0);
-    const formula = `ID ${formatShift(idTotal)} | PF ${formatShift(pfTotal)}`;
-    const identityPair = [...new Set([...(labour.idNumbers || [labour.id]), labour.pfNo].filter(Boolean))].join('/');
-    const tr = document.createElement('tr');
-    [index + 1, identityPair, labour.name || '', duration || '—', formula, formatShift(grandTotal)]
-      .forEach(value => { const td = document.createElement('td'); td.textContent = String(value); tr.appendChild(td); });
-    body.appendChild(tr);
-  });
-  if (!bonusPdfRows.length) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 6;
-    td.textContent = 'No eligible labour found in this period.';
-    tr.appendChild(td);
-    body.appendChild(tr);
+    table.appendChild(body);
+    page.append(title, subtitle, table);
+    printable.appendChild(page);
   }
-  table.appendChild(body);
-  printable.append(title, subtitle, table);
-  await html2pdf().set({ margin: 8, filename: 'bonus_eligible_labours.pdf', jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' } }).from(printable).save();
+  document.body.appendChild(printable);
+  try {
+    await html2pdf().set({ margin: 8, filename: 'bonus_eligible_labours.pdf', image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }, pagebreak: { mode: ['css'] } }).from(printable).save();
+  } finally {
+    printable.remove();
+    printStyle.remove();
+  }
   } catch (error) {
     console.error('Bonus PDF export failed:', error);
     alert(`Could not create the Bonus Report PDF: ${error.message || error}`);
