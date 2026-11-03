@@ -4092,34 +4092,44 @@ document.getElementById('uploadExcel').addEventListener('change', async function
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet);
 
+      const normalizeImportId = value => {
+        const text = String(value ?? '').trim().toUpperCase();
+        if (!text) return '';
+        // Excel may read an ID with leading zeroes as a number; compare digit-only IDs consistently.
+        return /^\d+$/.test(text) ? text.replace(/^0+(?=\d)/, '') : text;
+      };
+      const getImportValue = (row, ...names) => {
+        const wanted = new Set(names.map(name => name.toLowerCase().replace(/[^a-z0-9]/g, '')));
+        const key = Object.keys(row).find(header => wanted.has(header.toLowerCase().replace(/[^a-z0-9]/g, '')));
+        return key === undefined ? undefined : row[key];
+      };
+
       rows.forEach(r=>{
 
-        const id = String(r.ID || r.IdNo || r.Id).trim();
-        const pf = r.PF || r.PF1;
-        const esi = r.ESI;
-        const net = r["Net Salary"] || r["NET SALARY"];
+        const importId = normalizeImportId(getImportValue(r, 'IdNo', 'ID', 'Id'));
+        if (!importId) return;
+        const pf = getImportValue(r, 'PF', 'PF1');
+        const esi = getImportValue(r, 'ESI');
+        const net = getImportValue(r, 'Net Salary');
+        const salaryRows = Array.from(document.querySelectorAll('#salaryTable tbody tr'));
 
-        document.querySelectorAll('#salaryTable tbody tr').forEach(tr=>{
+        // Prefer a User ID match. If none exists, IdNo may identify the labour by PF number.
+        const userIdMatches = salaryRows.filter(tr => normalizeImportId(tr.dataset.id) === importId);
+        const matchedRows = userIdMatches.length ? userIdMatches : salaryRows.filter(tr => {
+          const pfCell = tr.querySelector('.pf-number-column');
+          return normalizeImportId(pfCell?.textContent) === importId;
+        });
 
-          if(tr.dataset.id === id){
-
-            const pfInput = tr.querySelector('.sal-pf1');
-            const esiInput = tr.querySelector('.sal-esi');
-            const jvcInput = tr.querySelector('.sal-jvc');
-
-            if(pfInput && pf!==undefined){
-              pfInput.value = pf;
-              pfInput.dispatchEvent(new Event('input'));
-            }
-
-            if(esiInput && esi!==undefined)
-              esiInput.value = esi;
-
-            if(jvcInput && net!==undefined)
-              jvcInput.value = net;
-
-          }
-
+        matchedRows.forEach(tr => {
+          const pfInput = tr.querySelector('.sal-pf1');
+          const esiInput = tr.querySelector('.sal-esi');
+          const jvcInput = tr.querySelector('.sal-jvc');
+          if (pfInput && pf !== undefined && pf !== '') pfInput.value = pf;
+          if (esiInput && esi !== undefined && esi !== '') esiInput.value = esi;
+          if (jvcInput && net !== undefined && net !== '') jvcInput.value = net;
+          [pfInput, esiInput, jvcInput].forEach(input => {
+            if (input) input.dispatchEvent(new Event('input', { bubbles: true }));
+          });
         });
 
       });
@@ -4177,7 +4187,6 @@ console.log(text);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </body>
 </html>
-
 
 
 
