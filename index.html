@@ -420,7 +420,8 @@ table thead th.sticky-check{
       <button class="btn" id="showAccountSummary">Show Summary</button>
       <div style="flex:1"></div>
       <button id="exportAccountCSV">Export CSV</button>
-      <button id="exportAccountXLS">Export Excel</button>
+      <button id="exportAccountXLS">Export Excel (.xlsx)</button>
+      <button id="exportAccountTXT">Export Notepad (.txt)</button>
     </div>
     <div id="accountTotalBox" style="margin-bottom:10px;padding:10px;border:2px solid #28a745;border-radius:8px;background:#eaffea;font-weight:bold;font-size:16px">
       OTHER BANK TOTAL : ₹ 0.00 &nbsp; | &nbsp; WITHIN BANK TOTAL : ₹ 0.00
@@ -434,11 +435,11 @@ table thead th.sticky-check{
             <th>SALARY</th>
             <th>IFSC CODE</th>
             <th>PARTY ACCOUNT NO</th>
-            <th>NAME</th>
+            <th>PARTY NAME</th>
             <th>BANK NAME</th>
             <th>BRANCH NAME</th>
-            <th>S.NO</th>
             <th>MOBILE NO</th>
+            <th>S.NO</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -448,12 +449,12 @@ table thead th.sticky-check{
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <h3 style="margin:0">Within Bank Account Summary</h3>
         <div style="flex:1"></div>
-        <button id="exportWithinBankXLS">Export Within Bank Excel</button>
+        <button id="exportWithinBankXLS">Export Within Bank Excel (.xlsx)</button>
       </div>
       <div class="table-wrap">
         <table id="withinBankSummaryTable">
           <thead>
-            <tr><th>ACC NO</th><th>NAME</th><th>S.NO</th><th>AMOUNT</th><th>DESCRIPTION</th></tr>
+            <tr><th>ACC NO</th><th>PARTY NAME</th><th>S.NO</th><th>AMOUNT</th><th>DESCRIPTION</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -3237,9 +3238,9 @@ document.getElementById('salarySearch').addEventListener('focus', function(){
 const OUR_ACCOUNT_NUMBER = '0662073000000113';
 const ACCOUNT_SUMMARY_HEADERS = [
     'COMPANY ACCOUNT NO', 'DATE', 'SALARY', 'IFSC CODE', 'PARTY ACCOUNT NO',
-    'NAME', 'BANK NAME', 'BRANCH NAME', 'S.NO', 'MOBILE NO'
+    'PARTY NAME', 'BANK NAME', 'BRANCH NAME', 'MOBILE NO', 'S.NO'
 ];
-const WITHIN_BANK_HEADERS = ['ACC NO', 'NAME', 'S.NO', 'AMOUNT', 'DESCRIPTION'];
+const WITHIN_BANK_HEADERS = ['ACC NO', 'PARTY NAME', 'S.NO', 'AMOUNT', 'DESCRIPTION'];
 let accountSummaryExportRows = [];
 let withinBankExportRows = [];
 
@@ -3258,6 +3259,11 @@ function bankExportText(value) {
     return String(value ?? '').replace(/[,.]/g, '').trim();
 }
 
+function formatSharedMobileNumber(value) {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    return digits.length === 10 ? `${digits}##` : digits;
+}
+
 function buildBankExportRow(row) {
     return [
         String(row[0] ?? '').replace(/\D/g, ''), // Our account number: keep every digit as text.
@@ -3268,8 +3274,8 @@ function buildBankExportRow(row) {
         bankExportText(row[5]),
         bankExportText(row[6]),
         bankExportText(row[7]),
-        String(row[8] ?? '').replace(/\D/g, ''),
-        String(row[9] ?? '').replace(/\D/g, '')
+        formatSharedMobileNumber(row[8]), // Mark every 10-digit mobile number in exported account files.
+        String(row[9] ?? '').replace(/\D/g, '') // S.No is the last column.
     ];
 }
 
@@ -3293,6 +3299,16 @@ function exportTotalRow(rows, columnCount, amountIndex) {
     return totalRow;
 }
 
+function downloadExcelWorkbook(headers, rows, filename, sheetName) {
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    worksheet['!cols'] = headers.map((header, index) => ({
+        wch: Math.min(40, Math.max(String(header).length + 2,
+            ...rows.map(row => String(row[index] ?? '').length + 2)))
+    }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    XLSX.writeFile(workbook, filename, { bookType: 'xlsx', compression: true });
+}
 function isExcludedInOpenSalarySheet(labourId, month) {
     // Respect an Exclude box immediately, even before the owner presses Save Salary Sheet.
     const salaryMonth = $('salaryMonth')?.value || $('ownerMonth')?.value;
@@ -3320,34 +3336,40 @@ $('exportAccountCSV').onclick = function () {
 
 $('exportAccountXLS').onclick = function () {
     const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value;
-    const headerHtml = ACCOUNT_SUMMARY_HEADERS.map(header => `<th>${escapeHtml(header)}</th>`).join('');
     const exportRows = accountSummaryExportRows.map(buildBankExportRow);
     exportRows.push(exportTotalRow(exportRows, ACCOUNT_SUMMARY_HEADERS.length, 2));
-    const rowsHtml = exportRows.map((row, index) => {
-        const isTotal = index === exportRows.length - 1;
-        const cellStyle = `mso-number-format:'\\@';${isTotal ? 'background:#fff2cc;font-weight:bold;' : ''}`;
-        return `<tr>${row.map(value => `<td style="${cellStyle}">${escapeHtml(value)}</td>`).join('')}</tr>`;
-    }
-    ).join('');
-    const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 landscape;margin:8mm}body{margin:0}table{border-collapse:collapse;width:100%;table-layout:auto}th,td{border:1px solid #000;padding:7px 9px;white-space:nowrap;font-size:11pt}th{font-weight:bold;text-align:center}</style></head><body><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
-    downloadBlob('\uFEFF' + html, `account_summary_${month || 'export'}.xls`, 'application/vnd.ms-excel');
+    downloadExcelWorkbook(ACCOUNT_SUMMARY_HEADERS, exportRows,
+        `account_summary_${month || 'export'}.xlsx`, 'Account Summary');
+};
+$('exportAccountTXT').onclick = function () {
+    const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value || 'export';
+    const rows = accountSummaryExportRows.map(buildBankExportRow);
+    rows.push(exportTotalRow(rows, ACCOUNT_SUMMARY_HEADERS.length, 2));
+    const clean = value => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
+    const widths = ACCOUNT_SUMMARY_HEADERS.map((header, index) => Math.max(
+        header.length,
+        ...rows.map(row => clean(row[index]).length)
+    ));
+    const formatRow = row => '| ' + row.map((value, index) => clean(value).padEnd(widths[index])).join(' | ') + ' |';
+    const divider = '+-' + widths.map(width => '-'.repeat(width)).join('-+-') + '-+';
+    const table = [divider, formatRow(ACCOUNT_SUMMARY_HEADERS), divider,
+        ...rows.map(formatRow), divider].join('\r\n');
+    const text = [
+        `ACCOUNT SUMMARY — ${month}`,
+        '',
+        'OTHER BANK ACCOUNT SUMMARY',
+        table
+    ].join('\r\n');
+    downloadBlob('\uFEFF' + text, `account_summary_${month}.txt`, 'text/plain;charset=utf-8');
 };
 
 $('exportWithinBankXLS').onclick = function () {
     const month = $('accountMonth').value || $('salaryMonth').value || $('ownerMonth').value;
-    const headerHtml = WITHIN_BANK_HEADERS.map(header => `<th>${escapeHtml(header)}</th>`).join('');
     const exportRows = withinBankExportRows.map(buildWithinBankExportRow);
     exportRows.push(exportTotalRow(exportRows, WITHIN_BANK_HEADERS.length, 3));
-    const rowsHtml = exportRows.map((row, index) => {
-        const isTotal = index === exportRows.length - 1;
-        const cellStyle = `mso-number-format:'\\@';${isTotal ? 'background:#fff2cc;font-weight:bold;' : ''}`;
-        return `<tr>${row.map(value => `<td style="${cellStyle}">${escapeHtml(value)}</td>`).join('')}</tr>`;
-    }
-    ).join('');
-    const html = `<html><head><meta charset="utf-8"><style>@page{size:A4 landscape;margin:8mm;mso-page-orientation:landscape}body{margin:0}table{border-collapse:collapse;width:281mm;table-layout:fixed;mso-fit-to-page:yes}th,td{border:1px solid #000;padding:7px 5px;font-size:11pt;vertical-align:middle}th{font-weight:bold;text-align:center;white-space:normal}td:nth-child(1),td:nth-child(3),td:nth-child(4){white-space:nowrap}</style></head><body><table><colgroup><col style="width:30mm"><col style="width:128mm"><col style="width:14mm"><col style="width:35mm"><col style="width:210pt;mso-width-source:userset;mso-width-alt:10240"></colgroup><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
-    downloadBlob('\uFEFF' + html, `within_bank_summary_${month || 'export'}.xls`, 'application/vnd.ms-excel');
-};
-$('showAccountSummary').onclick = renderAccountSummary;
+    downloadExcelWorkbook(WITHIN_BANK_HEADERS, exportRows,
+        `within_bank_summary_${month || 'export'}.xlsx`, 'Within Bank Summary');
+};$('showAccountSummary').onclick = renderAccountSummary;
 
 async function renderAccountSummary() {
 
@@ -3461,7 +3483,7 @@ async function renderAccountSummary() {
         const row = [
             OUR_ACCOUNT_NUMBER, '', salaryAmt.toFixed(2), lab.ifsc || '',
             lab.accountNo || '', holderName, lab.bankName || '', lab.branch || '',
-            rowNumber, lab.mobileNo || ''
+            lab.mobileNo || '', rowNumber
         ];
         accountSummaryExportRows.push(row);
 
@@ -3469,7 +3491,7 @@ async function renderAccountSummary() {
         row.forEach((value, index) => {
             const td = document.createElement('td');
             if (index === 5) {
-                // Keep master/attendance name visible on-screen, but not in the bank export.
+                // Keep the master name visible under Party Name, while retaining the account holder name first.
                 td.innerHTML = `<div>${escapeHtml(holderName)}</div><div class="small muted">Labour: ${escapeHtml(lab.name || '')}</div>`;
             } else {
                 td.textContent = value;
