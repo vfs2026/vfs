@@ -501,11 +501,18 @@ table thead th.sticky-check{
   </div>
 </div>
     
-    <div class="card" style="margin-top:12px; padding: 14px;">
+    <div class="card" id="manageLaboursCard" style="margin-top:12px; padding: 14px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h3 style="margin:0;">Manage Labours (Master Data)</h3>
+          <input id="labourMasterSearch" class="search" type="search"
+                 placeholder="Search ID, name or PF No"
+                 aria-label="Search Manage Labours by ID, name or PF number"
+                 title="Search Manage Labours by ID, name or PF number"
+                 oninput="filterLabourMaster()"
+                 style="background:#fff8d6;border:2px solid #e2b52b;border-radius:6px;padding:7px">
           <button id="addLabour">Add Labour</button>
         </div>
+        <div class="small muted" style="margin:6px 0 10px">Highlighted search filters the master list by ID, name or PF number.</div>
 
         <div class="reorder-controls">
           <button id="enableReorder" class="btn">Enable Reorder</button>
@@ -1013,6 +1020,7 @@ const tabContentMap = {
    account: $('accountTabContent'),
    bonus: $('bonusTabContent')
 };
+let attendanceCountBaseline = null;
 function switchTab(tabName) {
     // 1. Hide all content and remove active class from all buttons
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -1025,6 +1033,7 @@ function switchTab(tabName) {
     if (content && button) {
         content.classList.remove('hidden');
         button.classList.add('active');
+        if (tabName === 'attendance') attendanceCountBaseline = null;
         // 3. Trigger initial load/render logic for the tab if necessary
        if (tabName === 'attendance') {
 
@@ -1183,35 +1192,8 @@ html += `
 });
 
     el.addEventListener('input', () => {
-
-$('loadTable').onclick = async () => {
-
-  await generateOwnerTable();
-};
-  updateRowTotals(); 
-updateAttendanceCounts();
-
-function updateAttendanceCounts() {
-  const countMap = {};
-
-  document.querySelectorAll('.attCell').forEach(cell => {
-    const day = cell.dataset.day;
-    const val = cell.value.trim().toUpperCase();
-
-    if (!countMap[day]) countMap[day] = 0;
-
-    // ✅ Count only if attended (> 0)
-    if (val !== 'A' && Number(val) > 0) {
-      countMap[day]++;
-    }
-  });
-
-  document.querySelectorAll('.att-count').forEach(td => {
-    const day = td.dataset.day;
-    td.textContent = countMap[day] || 0;
-  });
-}
-  // 🔑 INSTANT UPDATE
+      updateRowTotals();
+      updateAttendanceCounts();
 });
 el.addEventListener('blur', (ev) => {
       ev.target.style.zIndex = '';
@@ -1247,8 +1229,98 @@ el.addEventListener('blur', () => {
   });
 
   updateRowTotals();
+  updateAttendanceCounts();
   if(scrollToTop) scrollToElement($('ownerTableWrap'));
 }
+function updateAttendanceCounts() {
+  const countCells = document.querySelectorAll('.att-count');
+  const countMap = {};
+  document.querySelectorAll('.attCell').forEach(cell => {
+    const day = cell.dataset.day;
+    const value = cell.value.trim().toUpperCase();
+    if (!countMap[day]) countMap[day] = 0;
+    if (value !== 'A' && Number(value) > 0) countMap[day]++;
+  });
+  countCells.forEach(td => {
+    const total = countMap[td.dataset.day] || 0;
+    const baseline = attendanceCountBaseline?.[td.dataset.day] || 0;
+    td.textContent = Math.max(0, total - baseline);
+  });
+}
+
+document.addEventListener('keydown', event => {
+  const key = event.key.toLowerCase();
+
+  if (event.altKey && !event.ctrlKey && key === 's') {
+    const managerPanel = $('manageLaboursCard');
+    const managerSearch = $('labourMasterSearch');
+    const managerBounds = managerPanel?.getBoundingClientRect();
+    const managerInContext = document.activeElement?.closest('#manageLaboursCard') ||
+      (managerBounds && managerBounds.top < window.innerHeight * 0.65 && managerBounds.bottom > 0);
+    const activeTab = Array.from(document.querySelectorAll('.tab-content'))
+      .find(tab => !tab.classList.contains('hidden'));
+    const searchByTab = {
+      attendanceTabContent: 'ownerSearch',
+      salaryTabContent: 'salarySearch',
+      advancesTabContent: 'advSearch',
+      bonusTabContent: 'bonusLabourSearch'
+    };
+    const search = managerInContext ? managerSearch :
+      $(searchByTab[activeTab?.id] || '') || managerSearch;
+    if (!search) return;
+    event.preventDefault();
+    search.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    search.focus();
+    try { search.select(); } catch (_) {}
+    return;
+  }
+
+  if (!event.ctrlKey) return;
+
+  if (key === 'u') {
+    event.preventDefault();
+    if ($('attendanceTabContent').classList.contains('hidden')) switchTab('attendance');
+    const useDate = $('useCustomDate');
+    const jumpDate = $('jumpDate');
+    if (useDate) useDate.checked = true;
+    if (jumpDate) {
+      jumpDate.focus();
+      try { jumpDate.select(); } catch (_) {}
+    }
+    return;
+  }
+
+  if (key === 'r') {
+    const attendanceTab = $('attendanceTabContent');
+    if (!attendanceTab || attendanceTab.classList.contains('hidden')) return;
+    event.preventDefault();
+    attendanceCountBaseline = {};
+    document.querySelectorAll('.attCell').forEach(cell => {
+      const day = cell.dataset.day;
+      const value = cell.value.trim().toUpperCase();
+      if (!attendanceCountBaseline[day]) attendanceCountBaseline[day] = 0;
+      if (value !== 'A' && Number(value) > 0) attendanceCountBaseline[day]++;
+    });
+    document.querySelectorAll('.att-count').forEach(td => { td.textContent = '0'; });
+    return;
+  }
+
+  if (key === 's') {
+    const activeContent = Array.from(document.querySelectorAll('.tab-content'))
+      .find(tab => !tab.classList.contains('hidden'));
+    const saveButtonByTab = {
+      attendanceTabContent: 'saveAll',
+      salaryTabContent: 'saveSalary',
+      advancesTabContent: 'saveAdv'
+    };
+    const saveButtonId = activeContent && saveButtonByTab[activeContent.id];
+    const saveButton = saveButtonId && $(saveButtonId);
+    if (!saveButton || saveButton.disabled) return;
+    event.preventDefault();
+    saveButton.click();
+  }
+});
+
 $('loadTable').onclick = async () => {
   await generateOwnerTable(); // 🔥 REQUIRED
 };
@@ -2386,9 +2458,25 @@ async function renderLabourList(){
   });
   html += '</tbody></table>';
   $('labourList').innerHTML = html;
+  filterLabourMaster();
 
   // initialize drag & drop listeners (they will only be active when reorderEnabled = true)
   initDragHandlers();
+}
+
+function filterLabourMaster() {
+  const input = $('labourMasterSearch');
+  const query = (input?.value || '').trim().toLowerCase();
+  let visibleNumber = 0;
+  document.querySelectorAll('#labourTable tbody tr.lab-row').forEach(row => {
+    const matches = !query || row.innerText.toLowerCase().includes(query);
+    row.style.display = matches ? '' : 'none';
+    if (matches) {
+      visibleNumber++;
+      const serialCell = row.querySelector('.lab-sno');
+      if (serialCell) serialCell.textContent = visibleNumber;
+    }
+  });
 }
 
 /* enable drag listeners for rows */
