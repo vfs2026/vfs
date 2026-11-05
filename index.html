@@ -1020,7 +1020,7 @@ const tabContentMap = {
    account: $('accountTabContent'),
    bonus: $('bonusTabContent')
 };
-let attendanceCountBaseline = null;
+let attendanceCellsCountedAfterReset = null;
 function switchTab(tabName) {
     // 1. Hide all content and remove active class from all buttons
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -1033,7 +1033,7 @@ function switchTab(tabName) {
     if (content && button) {
         content.classList.remove('hidden');
         button.classList.add('active');
-        if (tabName === 'attendance') attendanceCountBaseline = null;
+        if (tabName === 'attendance') attendanceCellsCountedAfterReset = null;
         // 3. Trigger initial load/render logic for the tab if necessary
        if (tabName === 'attendance') {
 
@@ -1193,6 +1193,9 @@ html += `
 
     el.addEventListener('input', () => {
       updateRowTotals();
+      if (attendanceCellsCountedAfterReset) {
+        attendanceCellsCountedAfterReset.add(`${el.dataset.id}_${el.dataset.day}`);
+      }
       updateAttendanceCounts();
 });
 el.addEventListener('blur', (ev) => {
@@ -1239,12 +1242,12 @@ function updateAttendanceCounts() {
     const day = cell.dataset.day;
     const value = cell.value.trim().toUpperCase();
     if (!countMap[day]) countMap[day] = 0;
-    if (value !== 'A' && Number(value) > 0) countMap[day]++;
+    const isPresent = value !== 'A' && Number(value) > 0;
+    const wasCountedAfterReset = attendanceCellsCountedAfterReset?.has(`${cell.dataset.id}_${day}`);
+    if (isPresent && (!attendanceCellsCountedAfterReset || wasCountedAfterReset)) countMap[day]++;
   });
   countCells.forEach(td => {
-    const total = countMap[td.dataset.day] || 0;
-    const baseline = attendanceCountBaseline?.[td.dataset.day] || 0;
-    td.textContent = Math.max(0, total - baseline);
+    td.textContent = countMap[td.dataset.day] || 0;
   });
 }
 
@@ -1252,11 +1255,6 @@ document.addEventListener('keydown', event => {
   const key = event.key.toLowerCase();
 
   if (event.altKey && !event.ctrlKey && key === 's') {
-    const managerPanel = $('manageLaboursCard');
-    const managerSearch = $('labourMasterSearch');
-    const managerBounds = managerPanel?.getBoundingClientRect();
-    const managerInContext = document.activeElement?.closest('#manageLaboursCard') ||
-      (managerBounds && managerBounds.top < window.innerHeight * 0.65 && managerBounds.bottom > 0);
     const activeTab = Array.from(document.querySelectorAll('.tab-content'))
       .find(tab => !tab.classList.contains('hidden'));
     const searchByTab = {
@@ -1265,8 +1263,8 @@ document.addEventListener('keydown', event => {
       advancesTabContent: 'advSearch',
       bonusTabContent: 'bonusLabourSearch'
     };
-    const search = managerInContext ? managerSearch :
-      $(searchByTab[activeTab?.id] || '') || managerSearch;
+    const searchId = activeTab && searchByTab[activeTab.id];
+    const search = searchId ? $(searchId) : null;
     if (!search) return;
     event.preventDefault();
     search.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1294,13 +1292,7 @@ document.addEventListener('keydown', event => {
     const attendanceTab = $('attendanceTabContent');
     if (!attendanceTab || attendanceTab.classList.contains('hidden')) return;
     event.preventDefault();
-    attendanceCountBaseline = {};
-    document.querySelectorAll('.attCell').forEach(cell => {
-      const day = cell.dataset.day;
-      const value = cell.value.trim().toUpperCase();
-      if (!attendanceCountBaseline[day]) attendanceCountBaseline[day] = 0;
-      if (value !== 'A' && Number(value) > 0) attendanceCountBaseline[day]++;
-    });
+    attendanceCellsCountedAfterReset = new Set();
     document.querySelectorAll('.att-count').forEach(td => { td.textContent = '0'; });
     return;
   }
@@ -3203,6 +3195,17 @@ function ownerFilter(){
     tr.style.display = (!q || text.includes(q)) ? '' : 'none';
   });
 }
+
+['useCustomDate', 'jumpDate'].forEach(id => {
+  const control = document.getElementById(id);
+  control?.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const searchBox = document.getElementById('ownerSearch');
+    searchBox?.focus();
+    try { searchBox?.select(); } catch (_) {}
+  });
+});
 
 // ===== ENTER in Attendance search → jump to date cell =====
 document.getElementById('ownerSearch').addEventListener('keydown', function (e) {
